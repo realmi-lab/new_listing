@@ -62,18 +62,17 @@ func usage() {
   -no-browser                켤 때 브라우저를 열지 않음
 
 그 밖의 옵션
-  -addr 주소                 화면 주소 (기본 127.0.0.1:8770)
+  -port 번호                 화면 포트 (기본 8770, 이 PC 안 127.0.0.1에서만 열림)
   -lookback 기간             켤 때 찾을 상장 기간 (기본 168h = 7일)
   -registry-interval 간격    마켓 목록 확인 간격 (기본 5s)
   -upbit-rate 횟수           업비트 그룹별 초당 요청 상한 (기본 8, 최대 8)
                              같은 PC에서 다른 업비트 프로그램을 쓸 때 낮춥니다
   -verbose                   자세한 기록 출력
-  -web 폴더                  화면 파일 폴더 (개발용)
 
 예시
   %[1]s
   %[1]s -watch BTC
-  %[1]s -no-browser -addr 127.0.0.1:9000
+  %[1]s -port 9000
 `, name)
 }
 

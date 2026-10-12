@@ -48,12 +48,11 @@ func main() {
 }
 
 func run() error {
-	addr := flag.String("addr", "127.0.0.1:8770", "화면 주소")
+	port := flag.Int("port", 8770, "화면 포트 (이 PC 안 127.0.0.1에서만 열림)")
 	lookback := flag.Duration("lookback", discovery.DefaultLookback, "켤 때 찾을 상장 기간")
 	registryInterval := flag.Duration("registry-interval", registry.DefaultInterval, "마켓 목록 확인 간격")
 	watch := flag.String("watch", "", "지금부터 직접 추적할 코인, 쉼표로 구분 (예: BTC,ETH)")
 	upbitRate := flag.Float64("upbit-rate", 0, "업비트 그룹별 초당 요청 상한 (같은 IP에서 다른 업비트 프로그램을 쓸 때 낮춤, 최대 8)")
-	webDir := flag.String("web", "", "화면 파일 폴더 (개발용; 기본은 실행 파일에 포함된 화면)")
 	noBrowser := flag.Bool("no-browser", false, "켤 때 브라우저를 열지 않음")
 	verbose := flag.Bool("verbose", false, "자세한 기록 출력")
 	flag.Usage = usage
@@ -117,10 +116,9 @@ func run() error {
 		}
 	}, logger)
 
+	// The screen is only the one built into this program.
 	var web fs.FS
-	if *webDir != "" {
-		web = os.DirFS(*webDir)
-	} else if embedded, ok := webui.FS(); ok {
+	if embedded, ok := webui.FS(); ok {
 		web = embedded
 	}
 	feeds := func() any {
@@ -133,16 +131,20 @@ func run() error {
 			"started_at":      started.UnixMilli(),
 		}
 	}
-	listener, err := net.Listen("tcp", *addr)
+	// The screen is served on this PC's loopback address only; no option
+	// opens it to other PCs.
+	if *port < 1024 || *port > 65535 {
+		return fmt.Errorf("포트는 1024~65535 사이로 지정하세요")
+	}
+	addr := net.JoinHostPort("127.0.0.1", fmt.Sprint(*port))
+	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("화면 주소 %s 를 열 수 없습니다 (이미 실행 중인지 확인하세요): %w", *addr, err)
+		return fmt.Errorf("화면 주소 %s 를 열 수 없습니다 (이미 실행 중이면 -port 로 다른 포트를 지정하세요): %w", addr, err)
 	}
 	api := httpapi.New(track, feeds, client.Now, web)
-	if tcp, ok := listener.Addr().(*net.TCPAddr); ok && tcp.IP.IsLoopback() {
-		api.LoopbackOnly(fmt.Sprint(tcp.Port))
-	}
+	api.LoopbackOnly(fmt.Sprint(*port))
 	server := &http.Server{
-		Addr: *addr, Handler: api.Handler(),
+		Addr: addr, Handler: api.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	url := "http://" + listener.Addr().String() + "/"
