@@ -14,13 +14,18 @@ import (
 
 const (
 	DefaultLookback = 7 * 24 * time.Hour
+	// HoursPerRead is one read of 60-minute candles, a bit over eight days:
+	// the lookback window plus the day before a listing.
+	HoursPerRead = 200
+	// MaxLookback keeps the first trading hour and the day before it
+	// inside one read.
+	MaxLookback = 8 * 24 * time.Hour
 	// KRW markets trade every day; a longer silence followed by trades
 	// inside the window is a relisting.
 	relistGap = 3 * 24 * time.Hour
 )
 
 type CandleSource interface {
-	Days(ctx context.Context, exchange market.Exchange, code string, count int) ([]candles.Candle, error)
 	Minutes(ctx context.Context, exchange market.Exchange, code string, unit int, to time.Time, count int) ([]candles.Candle, error)
 }
 
@@ -75,9 +80,10 @@ func (s *Scanner) Progress() map[market.Exchange]Progress {
 	return result
 }
 
-// Scan checks each market's day candles and reports every market that is
-// new within the window. It continues past single-market failures.
-func (s *Scanner) Scan(ctx context.Context, exchange market.Exchange, markets []market.Market, onFound func(Found)) {
+// Scan reads each market's hourly candles, hands them to onHours (the whole
+// market totals) and reports every market that is new within the window.
+// It continues past single-market failures.
+func (s *Scanner) Scan(ctx context.Context, exchange market.Exchange, markets []market.Market, onFound func(Found), onHours func(market.Market, []candles.Candle)) {
 	s.mu.Lock()
 	*s.progress[exchange] = Progress{Total: len(markets), Running: true}
 	s.mu.Unlock()
@@ -90,7 +96,7 @@ func (s *Scanner) Scan(ctx context.Context, exchange market.Exchange, markets []
 		if ctx.Err() != nil {
 			return
 		}
-		found, ok, err := s.check(ctx, exchange, m)
+		found, ok, err := s.check(ctx, exchange, m, onHours)
 		s.mu.Lock()
 		p := s.progress[exchange]
 		p.Done++
@@ -107,42 +113,31 @@ func (s *Scanner) Scan(ctx context.Context, exchange market.Exchange, markets []
 	}
 }
 
-func (s *Scanner) check(ctx context.Context, exchange market.Exchange, m market.Market) (Found, bool, error) {
+func (s *Scanner) check(ctx context.Context, exchange market.Exchange, m market.Market, onHours func(market.Market, []candles.Candle)) (Found, bool, error) {
 	now := s.now()
 	cutoff := now.Add(-s.lookback)
-	count := int(s.lookback/(24*time.Hour)) + 3
-	days, err := s.source.Days(ctx, exchange, m.Code, count)
+	hours, err := s.source.Minutes(ctx, exchange, m.Code, 60, time.Time{}, HoursPerRead)
 	if err != nil {
 		return Found{}, false, err
 	}
-	if len(days) == 0 {
+	if onHours != nil {
+		onHours(m, hours)
+	}
+	if len(hours) == 0 {
 		return Found{Market: m}, true, nil
 	}
-	first, relisting, ok := firstDayInWindow(days, count, cutoff)
+	first, relisting, ok := firstHourInWindow(hours, HoursPerRead, cutoff)
 	if !ok {
 		return Found{}, false, nil
 	}
-	// The first ten-minute candle of that day narrows the first trade, then
-	// the one-minute candles of those ten minutes give it exactly.
-	dayEnd := first.Add(24 * time.Hour)
-	tens, err := s.source.Minutes(ctx, exchange, m.Code, 10, dayEnd, 24*6)
+	// The one-minute candles of that first hour give the first trade minute.
+	ones, err := s.source.Minutes(ctx, exchange, m.Code, 1, first.Add(time.Hour), 60)
 	if err != nil {
 		return Found{}, false, err
 	}
-	start := first
-	for _, c := range tens {
-		if !c.Start.Before(first) {
-			start = c.Start
-			break
-		}
-	}
-	ones, err := s.source.Minutes(ctx, exchange, m.Code, 1, start.Add(10*time.Minute), 10)
-	if err != nil {
-		return Found{}, false, err
-	}
-	firstTrade := start
+	firstTrade := first
 	for _, c := range ones {
-		if !c.Start.Before(start) {
+		if !c.Start.Before(first) {
 			firstTrade = c.Start
 			break
 		}
@@ -153,23 +148,22 @@ func (s *Scanner) check(ctx context.Context, exchange market.Exchange, m market.
 	return Found{Market: m, FirstTrade: firstTrade, Relisting: relisting}, true, nil
 }
 
-// firstDayInWindow finds the day trading (re)started, if it is recent. days
-// is oldest first; fewer than requested means nothing older exists.
-func firstDayInWindow(days []candles.Candle, requested int, cutoff time.Time) (time.Time, bool, bool) {
+// firstHourInWindow finds the hour trading (re)started, if it is recent.
+// hours is oldest first; fewer than requested means nothing older exists.
+func firstHourInWindow(hours []candles.Candle, requested int, cutoff time.Time) (time.Time, bool, bool) {
 	segment := 0
 	relisting := false
-	for i := len(days) - 1; i > 0; i-- {
-		if days[i].Start.Sub(days[i-1].Start) > relistGap {
+	for i := len(hours) - 1; i > 0; i-- {
+		if hours[i].Start.Sub(hours[i-1].Start) > relistGap {
 			segment, relisting = i, true
 			break
 		}
 	}
-	if !relisting && len(days) >= requested {
+	if !relisting && len(hours) >= requested {
 		return time.Time{}, false, false // trading began before the window
 	}
-	first := days[segment].Start
-	// The day candle starts before the first trade; keep a day of margin.
-	if first.Add(24 * time.Hour).Before(cutoff) {
+	first := hours[segment].Start
+	if first.Add(time.Hour).Before(cutoff) {
 		return time.Time{}, false, false
 	}
 	return first, relisting, true

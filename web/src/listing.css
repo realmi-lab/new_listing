@@ -779,7 +779,7 @@
 .nl-detail-exchanges { margin: 12px 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: var(--type-caption); }
 .nl-detail-exchanges li { display: grid; grid-template-columns: 44px 1fr auto; gap: 4px 8px; align-items: baseline; }
 .nl-detail-exchanges .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.nl-ex-name.nl-ex-bithumb { color: var(--primary); }
+.nl-ex-name.nl-ex-bithumb { color: var(--bithumb); }
 .nl-ex-name.nl-ex-upbit { color: var(--upbit); }
 .nl-detail-exchanges small { grid-column: 1 / -1; }
 .nl-detail-notices { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: var(--type-caption); }
@@ -821,18 +821,18 @@
 /* Upbit is purple everywhere it is drawn; Bithumb keeps Index2's solid texture. */
 .nl-texture.nl-ex-upbit { background: var(--upbit); border-color: var(--upbit); }
 .nl-ex-tag .nl-ex-upbit { color: var(--upbit); }
-.nl-ex-tag .nl-ex-bithumb { color: var(--primary); }
+.nl-ex-tag .nl-ex-bithumb { color: var(--bithumb); }
 .nl-venue-name.nl-ex-upbit { color: var(--upbit); }
 .nl-mini-table td small, .nl-mini-table th small { font-size: 0.6875rem; }
 .nl-detail-card .nl-bar { margin: 8px 0 4px; }
 
 /* Hourly view: rows of one coin are grouped, the total row stands out. */
-.nl-hour-table tr.nl-group-start > * { border-top: 1px solid var(--muted-foreground); }
-.nl-hour-table tr.nl-total-row td, .nl-hour-table tr.nl-total-row th { font-weight: 600; }
+.nl-table tr.nl-group-start > * { border-top: 1px solid var(--muted-foreground); }
+.nl-table tr.nl-total-row td, .nl-table tr.nl-total-row th { font-weight: 600; }
 .nl-kind { color: var(--muted-foreground); }
 .nl-kind.is-new { color: var(--foreground); font-weight: 600; }
 .nl-kind.is-new.nl-ex-upbit { color: var(--upbit); }
-.nl-kind.is-new.nl-ex-bithumb { color: var(--primary); }
+.nl-kind.is-new.nl-ex-bithumb { color: var(--bithumb); }
 .nl-venue-name small { display: block; font-weight: 400; }
 .nl-status small { display: block; margin-top: 6px; color: var(--muted-foreground); font-size: var(--type-caption); text-transform: none; }
 .nl-overview .nl-copy { font-size: var(--type-body); }
@@ -849,3 +849,20 @@
 .nl-terminal .nl-table thead th, .nl-terminal .nl-table thead th.num { text-align: center; }
 .nl-terminal .nl-table thead th > button { margin: 0 auto; }
 .nl-terminal .nl-table thead .nl-venue-cell > div { align-items: center; }
+
+/* Exchange colors: Bithumb orange, Upbit purple, in bars, legends and names. */
+.nl-texture.nl-ex-bithumb { background: var(--bithumb); border-color: var(--bithumb); }
+.nl-venue-name.nl-ex-bithumb { color: var(--bithumb); }
+.nl-share-compare { margin: 12px 0; padding: 8px 0; border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); }
+.nl-share-compare .nl-source { margin-top: 4px; }
+
+/* One line per listed exchange inside a coin cell; lines line up across cells. */
+.nl-coin-table td, .nl-coin-table th { vertical-align: top; }
+.nl-line { display: block; min-height: 20px; line-height: 20px; white-space: nowrap; }
+.nl-line + .nl-line { margin-top: 2px; }
+.nl-line-share { margin-left: 6px; color: var(--muted-foreground); font-size: 0.6875rem; }
+.nl-coin-table td small { margin-top: 2px; }
+
+/* The exchange share bars get a clear outline so the segments stand out. */
+.nl-table .breakdown .nl-bar, .nl-detail-card .nl-bar { border-color: var(--bar-border); }
+.nl-table .breakdown .nl-texture, .nl-detail-card .nl-bar .nl-texture { border-color: var(--bar-border); }

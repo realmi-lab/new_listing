@@ -45,6 +45,7 @@ func banner(version, url, lookback string) {
 	fmt.Printf("  화면 주소     %s\n", url)
 	fmt.Printf("  찾는 범위     최근 %s 상장, 상장 후 24시간\n", lookback)
 	fmt.Printf("  상장 공지     업비트 공지 목록 · 빗썸 공지 API\n")
+	fmt.Printf("  빗썸 점유율   빗썸 ÷ (빗썸+업비트), 원화 마켓 전체 시간봉\n")
 	fmt.Printf("  종료          Ctrl+C 또는 창 닫기\n")
 	fmt.Println(strings.Repeat("-", 48))
 }
@@ -63,7 +64,7 @@ func usage() {
 
 그 밖의 옵션
   -port 번호                 화면 포트 (기본 8770, 이 PC 안 127.0.0.1에서만 열림)
-  -lookback 기간             켤 때 찾을 상장 기간 (기본 168h = 7일)
+  -lookback 기간             켤 때 찾을 상장 기간 (기본 168h = 7일, 최대 192h = 8일)
   -registry-interval 간격    마켓 목록 확인 간격 (기본 5s)
   -upbit-rate 횟수           업비트 그룹별 초당 요청 상한 (기본 8, 최대 8)
                              같은 PC에서 다른 업비트 프로그램을 쓸 때 낮춥니다

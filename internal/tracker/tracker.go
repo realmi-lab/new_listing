@@ -127,6 +127,10 @@ type Tracker struct {
 
 	liveMin  map[market.Exchange]time.Duration
 	liveRate map[market.Exchange]float64
+
+	// share sums both exchanges' whole KRW market over clock hours
+	// [from, to]; see internal/marketshare.
+	share func(from, to int64) (bithumb, upbit float64, status string)
 }
 
 func New(lookup Lookup, lookback time.Duration) *Tracker {
@@ -142,6 +146,14 @@ func New(lookup Lookup, lookback time.Duration) *Tracker {
 
 // SetClock replaces the clock, normally with one corrected to the exchanges.
 func (t *Tracker) SetClock(now func() time.Time) { t.now = now }
+
+// SetShareSource gives the whole market totals used for Bithumb's overall
+// share before and after each listing.
+func (t *Tracker) SetShareSource(window func(from, to int64) (bithumb, upbit float64, status string)) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.share = window
+}
 
 // SetLiveRate sets how many live refreshes per second one exchange may use.
 func (t *Tracker) SetLiveRate(exchange market.Exchange, perSecond float64) {

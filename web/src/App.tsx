@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 
 import { useSnapshot, type Cell, type Coin, type Hour, type NoticeInfo, type Snapshot } from "./api";
 import { FilterButton } from "./FilterButton";
@@ -9,13 +9,13 @@ import {
 import { applyTheme, savedTheme, type Theme } from "./theme";
 
 type View = "coins" | "hours" | "notices";
-type SortField = "listed" | "name" | "exchange" | "cumulative" | "recent" | "current" | "change" | `ex:${string}`;
+type SortField = "listed" | "name" | "exchange" | "cumulative" | "recent" | "current" | "before" | "after";
 type Sort = { field: SortField; ascending: boolean } | null;
 
 const ROW_STEP = 100;
 
 function SortHeading({ label, field, sort, onSort, className }: {
-  label: string; field: SortField; sort: Sort; onSort: (field: SortField) => void; className?: string;
+  label: React.ReactNode; field: SortField; sort: Sort; onSort: (field: SortField) => void; className?: string;
 }) {
   const direction = sort?.field === field ? sort.ascending : undefined;
   return <th className={className} aria-sort={direction == null ? "none" : direction ? "ascending" : "descending"}>
@@ -56,12 +56,6 @@ function recentRange(coin: Coin, now: number): string {
   if (coin.recent_hour_from == null) return "";
   const done = coin.end_at != null && now >= coin.end_at;
   return `${formatKSTTime(coin.recent_hour_from)}~${formatKSTTime(done ? coin.end_at : now)}`;
-}
-
-/** The latest whole hour's change against the hour before it. */
-function lastChange(coin: Coin): number | null {
-  const hours = (coin.hours ?? []).filter(hour => hour.status !== "PENDING" && hour.status !== "LIVE");
-  return hours.length ? hours[hours.length - 1].change_pct : null;
 }
 
 /** Started but some market has not been read once yet. */
@@ -118,8 +112,8 @@ function sortValue(coin: Coin, field: SortField): number | string | null {
     case "cumulative": return coin.cumulative.amount;
     case "recent": return coin.recent_hour.amount;
     case "current": return currentHour(coin)?.total.amount ?? null;
-    case "change": return lastChange(coin);
-    default: return coin.exchanges[field.slice(3)]?.cumulative.amount ?? null;
+    case "before": return coin.market_share?.before.share ?? null;
+    case "after": return coin.market_share?.after.share ?? null;
   }
 }
 
@@ -230,8 +224,8 @@ export default function App() {
             <span>추적 중 거래금액</span>
             <strong>{amount(overview?.cumulative.amount)}</strong>
           </div>
-          <TextureBar segments={cellSegments(overview?.exchanges)} label="추적 중 코인의 거래소별 비중" large />
-          <ul className="nl-legend" aria-label="거래소별 비중 범례">
+          <TextureBar segments={cellSegments(overview?.exchanges)} label="추적 중 코인의 거래소 점유율" large />
+          <ul className="nl-legend" aria-label="거래소 점유율 범례">
             {EXCHANGES.map(([id, name], index) => <li key={id}>
               <span className={`nl-legend-box nl-texture nl-texture-${TEXTURES[index]} nl-ex-${id}`} />
               <span>{formatShare(overview?.exchanges[id]?.share)}</span>
@@ -294,7 +288,7 @@ export default function App() {
         <div className="nl-scroll nl-visual-scroll">
           <CoinDetail coin={selectedCoin} amount={amount} now={now} />
           <div className="nl-visual-heading"><span>상장 코인 24시간</span></div>
-          <div className="nl-visual-legend">[ 그리드 범례 ]<br />막대 = +1~+24시간 거래금액<br />무늬 = 빗썸 · 업비트 구성</div>
+          <div className="nl-visual-legend">[ 그리드 범례 ]<br />막대 = +1~+24시간 거래금액<br />색 = 빗썸(주황) · 업비트(보라) 점유율</div>
           <div className="nl-grid">
             {filters.coins.filter(coin => coin.hours).slice(0, 24).map(coin =>
               <button type="button" key={coin.key} className={`nl-grid-card${coin.key === selectedCoin?.key ? " is-selected" : ""}`}
@@ -311,16 +305,33 @@ export default function App() {
   );
 }
 
-function ExchangeCells({ coin, amount }: { coin: Coin; amount: (v: number | null | undefined) => string }) {
-  return <>{EXCHANGES.map(([id]) => {
-    const info = coin.exchanges[id];
-    if (!info?.listed) return <td key={id} className="num nl-venue-cell" title="미상장"><span>—</span><small className="nl-kind">[미상장]</small></td>;
-    return <td key={id} className="num nl-venue-cell" title={statusLabel(info.cumulative)}>
-      <span>{formatShare(info.cumulative.share)}</span>
-      <small title="거래금액">{amount(info.cumulative.amount)}</small>
-      <small className={info.newly_listed ? `nl-kind is-new nl-ex-${id}` : "nl-kind"}>{kindLabel(coin, id)}</small>
-    </td>;
-  })}</>;
+/** A coin's listed exchanges in display order: the new listings first, by
+ *  first trade, then the exchanges that already had the coin. */
+function listedOrder(coin: Coin): string[] {
+  const listed = EXCHANGES.map(([id]) => id as string).filter(id => coin.exchanges[id]?.listed);
+  const first = (id: string) => coin.exchanges[id]?.first_trade_at ?? Number.MAX_SAFE_INTEGER;
+  return listed.sort((a, b) => {
+    const na = coin.exchanges[a]?.newly_listed ? 0 : 1, nb = coin.exchanges[b]?.newly_listed ? 0 : 1;
+    return na - nb || first(a) - first(b);
+  });
+}
+
+/** One line per listed exchange inside a cell, in listedOrder. */
+function Lines({ ids, render }: { ids: string[]; render: (id: string) => React.ReactNode }) {
+  return <>{ids.map(id => <span key={id} className={`nl-line nl-line-${id}`}>{render(id)}</span>)}</>;
+}
+
+/** A share window as its start and length: both are 24 whole hours. */
+function shareRange(from: number, live: boolean): string {
+  return `${formatKST(from)}부터 ${live ? "지금까지" : "24시간"}`;
+}
+
+/** Percentage-point change of Bithumb's overall share since the listing. */
+function sharePoints(coin: Coin): string {
+  const before = coin.market_share?.before.share, after = coin.market_share?.after.share;
+  if (before == null || after == null) return "";
+  const points = after - before;
+  return `${points > 0 ? "+" : ""}${points.toFixed(2)}%p`;
 }
 
 function CoinTable({ coins, total, sort, onSort, amount, now, selected, onSelect, loading }: {
@@ -336,34 +347,53 @@ function CoinTable({ coins, total, sort, onSort, amount, now, selected, onSelect
       <SortHeading className="num" label="누적" field="cumulative" sort={sort} onSort={onSort} />
       <SortHeading className="num" label="최근 60분" field="recent" sort={sort} onSort={onSort} />
       <SortHeading className="num" label="진행 중 시간" field="current" sort={sort} onSort={onSort} />
-      <SortHeading className="num" label="-1시간 대비" field="change" sort={sort} onSort={onSort} />
-      <th className="breakdown">거래소 구성</th>
-      {EXCHANGES.map(([id, name]) => <SortHeading key={id} className={`num nl-venue-cell nl-venue-name nl-ex-${id}`} label={name} field={`ex:${id}`} sort={sort} onSort={onSort} />)}
+      <th className="breakdown">거래소 점유율</th>
+      <SortHeading className="num" label={<>상장 전 1일<br />빗썸 점유율</>} field="before" sort={sort} onSort={onSort} />
+      <SortHeading className="num" label={<>상장 후<br />빗썸 점유율</>} field="after" sort={sort} onSort={onSort} />
       <th>상태</th>
     </tr></thead>
     <tbody>
       {coins.map(coin => {
+        const ids = listedOrder(coin);
         const hour = currentHour(coin);
+        const ms = coin.market_share;
         return <tr key={coin.key} className={coin.key === selected ? "is-selected" : ""} onClick={() => onSelect(coin.key)}>
-          <td className="nl-ex-cell"><ExchangeTag coin={coin} /></td>
-          <th scope="row"><button type="button" className="nl-row-button" onClick={() => onSelect(coin.key)}>{coin.base}</button><small>{coin.korean_name}</small></th>
-          <td>{coin.anchor_at ? formatKST(coin.anchor_at) : "대기"}</td>
+          <td className="nl-ex-cell"><Lines ids={ids} render={id => <>
+            <span className={`nl-ex-name nl-ex-${id}`}>{EXCHANGE_NAME[id]}</span>{" "}
+            <span className={coin.exchanges[id]?.newly_listed ? `nl-kind is-new nl-ex-${id}` : "nl-kind"}>{kindLabel(coin, id)}</span>
+          </>} /></td>
+          <th scope="row">
+            <button type="button" className="nl-row-button" onClick={() => onSelect(coin.key)}>{coin.base}</button>
+            <small>{coin.korean_name}</small>
+          </th>
+          <td><Lines ids={ids} render={id => rowTime(coin, id)} /></td>
           <td>{elapsedLabel(coin, now)}</td>
-          <td className="num" title={statusLabel(coin.cumulative)}>{amount(coin.cumulative.amount)}<small>{formatShare(coin.cumulative.share)}</small></td>
-          <td className="num" title={`지금까지의 직전 60분 · ${statusLabel(coin.recent_hour)}`}>{amount(coin.recent_hour.amount)}<small>{recentRange(coin, now)}</small></td>
-          <td className="num" title={hour ? `상장 시각 기준 +${hour.index}시간 구간, 지금까지 쌓인 금액 · ${statusLabel(hour.total)}` : "24시간이 끝나 진행 중인 구간이 없습니다"}>
-            {hour ? amount(hour.total.amount) : coin.anchor_at ? "완료" : "—"}
-            <small>{hour ? `+${hour.index}시간 · ${formatKSTTime(hour.from)}~` : ""}</small>
+          <td className="num" title={statusLabel(coin.cumulative)}>
+            <Lines ids={ids} render={id => <>{amount(coin.exchanges[id]?.cumulative.amount)}<span className="nl-line-share">{formatShare(coin.exchanges[id]?.cumulative.share)}</span></>} />
           </td>
-          <td className="num">{formatChange(lastChange(coin))}</td>
-          <td className="breakdown"><TextureBar segments={cellSegments(coinExchangeCells(coin))} label={`${coin.base} 거래소 구성`} /></td>
-          <ExchangeCells coin={coin} amount={amount} />
+          <td className="num" title={`지금까지의 직전 60분 · ${statusLabel(coin.recent_hour)}`}>
+            <Lines ids={ids} render={id => <>{amount(coin.exchanges[id]?.recent_hour.amount)}<span className="nl-line-share">{formatShare(coin.exchanges[id]?.recent_hour.share)}</span></>} />
+            <small>{recentRange(coin, now)}</small>
+          </td>
+          <td className="num" title={hour ? `상장 시각 기준 +${hour.index}시간 구간, 지금까지 쌓인 금액 · ${statusLabel(hour.total)}` : "24시간이 끝나 진행 중인 구간이 없습니다"}>
+            {hour
+              ? <><Lines ids={ids} render={id => <>{amount(hour.exchanges[id]?.amount)}<span className="nl-line-share">{formatShare(hour.exchanges[id]?.share)}</span></>} />
+                <small>{`+${hour.index}시간 · ${formatKSTTime(hour.from)}~`}</small></>
+              : coin.anchor_at ? "완료" : "—"}
+          </td>
+          <td className="breakdown"><TextureBar segments={cellSegments(coinExchangeCells(coin))} label={`${coin.base} 거래소 점유율`} /></td>
+          <td className="num" title="상장 시각 앞 24시간, 업비트·빗썸 원화 마켓 전체 중 빗썸 비중 (정시 시간봉 기준)">
+            {ms ? <>{formatShare(ms.before.share)}<small>{shareRange(ms.before.from, false)}</small></> : "—"}
+          </td>
+          <td className="num" title="상장 시각부터 24시간(진행 중이면 지금까지), 업비트·빗썸 원화 마켓 전체 중 빗썸 비중 (정시 시간봉 기준)">
+            {ms ? <>{formatShare(ms.after.share)}<small>{sharePoints(coin) || shareRange(ms.after.from, ms.after.status === "LIVE")}</small></> : "—"}
+          </td>
           <td>{stillLoading(coin)
             ? <span className="nl-chip nl-chip-loading">불러오는 중</span>
             : <><span className={`nl-chip nl-chip-${coin.state.toLowerCase()}`}>{stateLabel(coin, now)}</span>{coin.cumulative.status === "PARTIAL" && <small>일부 미확인</small>}</>}</td>
         </tr>;
       })}
-      {!coins.length && <tr><td colSpan={11 + EXCHANGES.length} className="nl-empty">
+      {!coins.length && <tr><td colSpan={11} className="nl-empty">
         {loading ? "자료를 불러오는 중입니다." : total ? "필터에 맞는 코인이 없습니다." : "최근 상장한 코인이 없습니다. 새 상장은 감지되는 대로 표시됩니다."}
       </td></tr>}
     </tbody>
@@ -469,7 +499,7 @@ function CoinDetail({ coin, amount, now }: { coin: Coin | null; amount: (v: numb
     <div className="nl-visual-heading"><span><CoinName coin={coin} /> {coin.korean_name}</span><span>{stateLabel(coin, now)}</span></div>
     <p className="nl-source">첫 체결 {formatKST(coin.anchor_at)} · 상장 이후 {elapsedLabel(coin, now)}</p>
     <div className="nl-summary-heading"><span>누적 (최대 24시간)</span><strong>{amount(coin.cumulative.amount)}</strong></div>
-    <TextureBar segments={cellSegments(coinExchangeCells(coin))} label={`${coin.base} 거래소 구성`} />
+    <TextureBar segments={cellSegments(coinExchangeCells(coin))} label={`${coin.base} 거래소 점유율`} />
     <ul className="nl-detail-exchanges">
       {EXCHANGES.map(([id, name]) => {
         const info = coin.exchanges[id];
@@ -482,6 +512,17 @@ function CoinDetail({ coin, amount, now }: { coin: Coin | null; amount: (v: numb
         </li>;
       })}
     </ul>
+    {coin.market_share && <div className="nl-share-compare" title="업비트·빗썸 원화 마켓 전체 중 빗썸 비중 (정시 시간봉 기준)">
+      <div className="nl-summary-heading">
+        <span>빗썸 전체 점유율</span>
+        <strong>{formatShare(coin.market_share.before.share)} → {formatShare(coin.market_share.after.share)}</strong>
+      </div>
+      <p className="nl-source">
+        상장 전 1일 {shareRange(coin.market_share.before.from, false)}<br />
+        상장 후 {shareRange(coin.market_share.after.from, coin.market_share.after.status === "LIVE")}
+        {sharePoints(coin) && ` · ${sharePoints(coin)}`}
+      </p>
+    </div>}
     {hours.length > 0 && <HourBars hours={hours} />}
     {hours.length > 0 && <table className="nl-table nl-mini-table">
       <thead><tr>

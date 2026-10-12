@@ -26,6 +26,7 @@ import (
 	"listing-tracker/internal/discovery"
 	"listing-tracker/internal/httpapi"
 	"listing-tracker/internal/market"
+	"listing-tracker/internal/marketshare"
 	"listing-tracker/internal/notices"
 	"listing-tracker/internal/registry"
 	"listing-tracker/internal/restclient"
@@ -91,7 +92,18 @@ func run() error {
 		line("%s  신규 상장   %s %s — 첫 체결을 기다립니다", label(l.Exchange), l.Code, l.KoreanName)
 		track.AddListing(tracker.Listing{Market: l.Market, DetectedAt: l.DetectedAt, Relisting: l.Relisting, Source: tracker.SourceLive})
 	}, logger)
+	if *lookback <= 0 || *lookback > discovery.MaxLookback {
+		return fmt.Errorf("-lookback 은 최대 %s 입니다", humanDays(discovery.MaxLookback))
+	}
 	scanner := discovery.New(candleClient, *lookback)
+	// Whole KRW market totals for Bithumb's overall share around listings;
+	// filled by the startup scan, then kept fresh a few requests a second.
+	totals := marketshare.New()
+	track.SetShareSource(totals.Window)
+	totalsRate := map[market.Exchange]float64{market.Upbit: 1.5, market.Bithumb: 4}
+	if *upbitRate > 0 {
+		totalsRate[market.Upbit] = min(1.5, max(*upbitRate/4, 0.25))
+	}
 	scanner.SetClock(client.Now)
 
 	started := time.Now()
@@ -125,6 +137,7 @@ func run() error {
 		return map[string]any{
 			"registry":        watcher.Statuses(),
 			"discovery":       scanner.Progress(),
+			"market_totals":   totals.Statuses(),
 			"notices":         noticeWatcher.Statuses(),
 			"clock_offset_ms": client.Now().Sub(time.Now()).Milliseconds(),
 			"version":         version,
@@ -166,7 +179,10 @@ func run() error {
 	start(func() { noticeWatcher.Run(ctx) })
 	for _, exchange := range market.Exchanges {
 		start(func() { track.RunFetcher(ctx, exchange, candleClient) })
-		start(func() { scan(ctx, watcher, scanner, track, exchange) })
+		start(func() {
+			scan(ctx, watcher, scanner, track, totals, exchange)
+			totals.Refresh(ctx, candleClient, exchange, func() []market.Market { return watcher.Markets(exchange) }, totalsRate[exchange])
+		})
 	}
 	start(func() {
 		ticker := time.NewTicker(time.Second)
@@ -200,7 +216,7 @@ func run() error {
 
 // scan waits for the exchange's first market list, then looks for listings
 // inside the lookback window.
-func scan(ctx context.Context, watcher *registry.Watcher, scanner *discovery.Scanner, track *tracker.Tracker, exchange market.Exchange) {
+func scan(ctx context.Context, watcher *registry.Watcher, scanner *discovery.Scanner, track *tracker.Tracker, totals *marketshare.Totals, exchange market.Exchange) {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 	for watcher.Statuses()[exchange].LastSuccessAt.IsZero() {
@@ -219,9 +235,10 @@ func scan(ctx context.Context, watcher *registry.Watcher, scanner *discovery.Sca
 			line("%s  최근 상장   %-14s 첫 체결 %s", label(exchange), found.Market.Code, found.FirstTrade.In(candles.KST).Format("01-02 15:04"))
 		}
 		track.AddListing(tracker.Listing{Market: found.Market, FirstTrade: found.FirstTrade, Relisting: found.Relisting, Source: tracker.SourceScan})
-	})
+	}, func(m market.Market, hours []candles.Candle) { totals.Apply(m.Key(), hours) })
 	if ctx.Err() == nil {
 		p := scanner.Progress()[exchange]
+		totals.MarkReady(exchange, time.Now().Unix()/3600-discovery.HoursPerRead+1, p.Errors)
 		line("%s  확인 완료   최근 상장 %d개 · 조회 실패 %d개", label(exchange), p.Found, p.Errors)
 	}
 }

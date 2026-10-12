@@ -18,6 +18,8 @@
   --ring: oklch(0.78 0.15 75);
   --alert: #ff8a80;
   --upbit: #a78bfa;
+  --bithumb: #fb923c;
+  --bar-border: #ffffff;
   --grid-line: oklch(1 0 0 / 6%);
 }
 
@@ -35,6 +37,8 @@
   --ring: #9a4600;
   --alert: #b3261e;
   --upbit: #7c3aed;
+  --bithumb: #ea580c;
+  --bar-border: #1d1d1f;
   --grid-line: rgb(60 60 67 / 9%);
 }
 

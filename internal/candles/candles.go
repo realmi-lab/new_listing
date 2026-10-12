@@ -139,10 +139,6 @@ func (c *Client) Minutes(ctx context.Context, exchange market.Exchange, code str
 	return c.get(ctx, exchange, "/minutes/"+strconv.Itoa(unit), code, to, count)
 }
 
-func (c *Client) Days(ctx context.Context, exchange market.Exchange, code string, count int) ([]Candle, error) {
-	return c.get(ctx, exchange, "/days", code, time.Time{}, count)
-}
-
 // MinuteRange returns every one-minute candle in [from, to), paging back
 // from to. The result says how far back the answer is complete: when the
 // exchange returned a short page there is nothing older at all.

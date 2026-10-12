@@ -77,6 +77,8 @@ type ExchangeInfo struct {
 	// Cumulative is this exchange's amount since the coin's first trade,
 	// with its share of the coin.
 	Cumulative Cell `json:"cumulative"`
+	// RecentHour is this exchange's part of the coin's RecentHour.
+	RecentHour Cell `json:"recent_hour"`
 }
 
 type Coin struct {
@@ -96,11 +98,32 @@ type Coin struct {
 	Cumulative Cell `json:"cumulative"`
 	FirstHour  Cell `json:"first_hour"`
 	LastHour   Cell `json:"last_hour"` // the hour in progress, or hour 24 when complete
+	// MarketShare is Bithumb's overall share around the listing.
+	MarketShare *MarketShare `json:"market_share"`
 	// RecentHour is the 60 minutes up to now inside the 24 hours (since the
 	// first trade when shorter); after the 24 hours it is hour 24.
 	RecentHour     Cell         `json:"recent_hour"`
 	RecentHourFrom int64        `json:"recent_hour_from,omitempty"`
 	Notices        []NoticeInfo `json:"notices"`
+}
+
+// ShareWindow is Bithumb's share of the whole KRW market (Bithumb + Upbit,
+// every KRW market) over whole clock hours [From, To).
+type ShareWindow struct {
+	From    int64    `json:"from"`
+	To      int64    `json:"to"`
+	Bithumb *float64 `json:"bithumb"`
+	Upbit   *float64 `json:"upbit"`
+	Share   *float64 `json:"share"`
+	Status  string   `json:"status"`
+}
+
+// MarketShare compares the day before a listing with the time since it.
+// Hourly candles start on the hour, so the windows are the 24 whole hours
+// before the listing hour, and the listing hour up to now (at most +24h).
+type MarketShare struct {
+	Before ShareWindow `json:"before"`
+	After  ShareWindow `json:"after"`
 }
 
 type NoticeInfo struct {
@@ -303,6 +326,21 @@ func (t *Tracker) Snapshot(now time.Time) Snapshot {
 	return snapshot
 }
 
+func (t *Tracker) shareWindow(from, to int64, live bool) ShareWindow {
+	w := ShareWindow{From: from * 3600 * 1000, To: (to + 1) * 3600 * 1000}
+	bithumb, upbit, status := t.share(from, to)
+	w.Status = status
+	if status == StatusWaiting {
+		return w
+	}
+	w.Bithumb, w.Upbit = f(bithumb), f(upbit)
+	w.Share = share(w.Bithumb, f(bithumb+upbit))
+	if live && status == StatusFinal {
+		w.Status = StatusLive
+	}
+	return w
+}
+
 func noticeInfo(n notices.Notice) NoticeInfo {
 	return NoticeInfo{
 		Exchange: string(n.Exchange), Title: n.Title, URL: n.URL, Category: n.Category,
@@ -328,12 +366,12 @@ func (t *Tracker) coinLocked(s *session, nowMin, closed int64) Coin {
 	}
 	for _, exchange := range market.Exchanges {
 		tr := s.tracks[exchange]
-		info := ExchangeInfo{Cumulative: Cell{Status: StatusUnlisted}}
+		info := ExchangeInfo{Cumulative: Cell{Status: StatusUnlisted}, RecentHour: Cell{Status: StatusUnlisted}}
 		if tr != nil {
 			info = ExchangeInfo{
 				Listed: true, Market: tr.market.Code, NewlyListed: tr.newlyListed, Relisting: tr.relisting,
 				DetectedAt: ms(tr.detectedAt), Source: tr.source, LastSuccess: ms(tr.lastSuccess), LastError: tr.lastError,
-				LastTradeAt: ms(tr.lastTradeAt), Cumulative: Cell{Status: StatusWaiting},
+				LastTradeAt: ms(tr.lastTradeAt), Cumulative: Cell{Status: StatusWaiting}, RecentHour: Cell{Status: StatusWaiting},
 			}
 			if tr.firstConfirmed {
 				info.FirstTradeAt = ms(timeOf(tr.firstTrade))
@@ -349,6 +387,16 @@ func (t *Tracker) coinLocked(s *session, nowMin, closed int64) Coin {
 	}
 	if s.anchor == 0 {
 		return coin
+	}
+	if t.share != nil {
+		// Both windows are 24 whole hours: the day before the listing hour,
+		// and the listing hour plus the 23 after it.
+		anchorHour, nowHour := s.anchor/60, nowMin/60
+		endHour := anchorHour + TrackHours - 1
+		coin.MarketShare = &MarketShare{
+			Before: t.shareWindow(anchorHour-24, anchorHour-1, false),
+			After:  t.shareWindow(anchorHour, min(nowHour, endHour), nowHour <= endHour),
+		}
 	}
 
 	var cumulative *float64
@@ -409,9 +457,20 @@ func (t *Tracker) coinLocked(s *session, nowMin, closed int64) Coin {
 	}
 	recent := make([]Cell, 0, len(market.Exchanges))
 	for _, exchange := range market.Exchanges {
-		recent = append(recent, s.tracks[exchange].span(from, to, nowMin))
+		c := s.tracks[exchange].span(from, to, nowMin)
+		recent = append(recent, c)
+		if info := coin.Exchanges[string(exchange)]; info.Listed {
+			info.RecentHour = c
+			coin.Exchanges[string(exchange)] = info
+		}
 	}
 	coin.RecentHour, coin.RecentHourFrom = combine(recent), timeOf(from).UnixMilli()
+	for exchange, info := range coin.Exchanges {
+		if info.Listed {
+			info.RecentHour.Share = share(info.RecentHour.Amount, coin.RecentHour.Amount)
+			coin.Exchanges[exchange] = info
+		}
+	}
 	last := min(max(coin.CurrentHour, 1), TrackHours)
 	coin.LastHour = coin.Hours[last-1].Total
 

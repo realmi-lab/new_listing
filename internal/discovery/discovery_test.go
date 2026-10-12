@@ -38,10 +38,6 @@ func (f fakeSource) grouped(code string, size time.Duration, to time.Time, count
 	return result
 }
 
-func (f fakeSource) Days(_ context.Context, _ market.Exchange, code string, count int) ([]candles.Candle, error) {
-	return f.grouped(code, 24*time.Hour, time.Time{}, count), nil
-}
-
 func (f fakeSource) Minutes(_ context.Context, _ market.Exchange, code string, unit int, to time.Time, count int) ([]candles.Candle, error) {
 	return f.grouped(code, time.Duration(unit)*time.Minute, to, count), nil
 }
@@ -72,7 +68,9 @@ func TestScanFindsFirstTradeMinuteOfRecentListings(t *testing.T) {
 		all = append(all, market.Market{Exchange: market.Upbit, Code: "KRW-" + code, Base: code, Quote: "KRW"})
 	}
 	found := map[string]Found{}
-	scanner.Scan(context.Background(), market.Upbit, all, func(f Found) { found[f.Market.Base] = f })
+	hourReads := map[string]int{}
+	scanner.Scan(context.Background(), market.Upbit, all, func(f Found) { found[f.Market.Base] = f },
+		func(m market.Market, hours []candles.Candle) { hourReads[m.Base] = len(hours) })
 
 	if f, ok := found["NEW"]; !ok || !f.FirstTrade.Equal(listed) || f.Relisting {
 		t.Fatalf("NEW: %+v ok=%v", f, ok)
@@ -90,5 +88,9 @@ func TestScanFindsFirstTradeMinuteOfRecentListings(t *testing.T) {
 	}
 	if p := scanner.Progress()[market.Upbit]; p.Done != 5 || p.Found != 3 || p.Running {
 		t.Fatalf("progress %+v", p)
+	}
+	// Every market's hourly candles go to the whole market totals.
+	if len(hourReads) != 5 || hourReads["OLD"] != HoursPerRead || hourReads["SOON"] != 0 {
+		t.Fatalf("hour reads %v", hourReads)
 	}
 }

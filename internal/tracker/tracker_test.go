@@ -143,6 +143,9 @@ func TestLateStartRebuildsTheFirst24HoursFromCandles(t *testing.T) {
 	if got := amount(coin.RecentHour); got != 540 || coin.RecentHour.Status != StatusFinal {
 		t.Fatalf("recent hour after 24 hours = %v %s", got, coin.RecentHour.Status)
 	}
+	if up, bt := amount(coin.Exchanges["upbit"].RecentHour), amount(coin.Exchanges["bithumb"].RecentHour); up != 480 || bt != 60 {
+		t.Fatalf("recent hour by exchange: upbit %v bithumb %v", up, bt)
+	}
 	if got := *coin.Hours[23].ExchangeCumulative["upbit"]; got != 24*480 {
 		t.Fatalf("upbit cumulative %v", got)
 	}
@@ -292,6 +295,39 @@ func TestListingsOfOneCoinJoinWithin24Hours(t *testing.T) {
 	joined := snap.Coins[0]
 	if *joined.AnchorAt != first.UnixMilli() || !joined.Exchanges["upbit"].Listed || !joined.Exchanges["bithumb"].NewlyListed {
 		t.Fatalf("joined coin %+v", joined)
+	}
+}
+
+func TestMarketShareComparesTheDayBeforeWithTheTimeSince(t *testing.T) {
+	first := time.Date(2026, 10, 12, 5, 10, 0, 0, time.UTC) // 14:10 KST
+	now := first.Add(3 * time.Hour)
+	tr := New(fakeLookup{}, 7*24*time.Hour)
+	tr.SetClock(func() time.Time { return now })
+	var asked [][2]int64
+	tr.SetShareSource(func(from, to int64) (float64, float64, string) {
+		asked = append(asked, [2]int64{from, to})
+		if to < first.Unix()/3600 {
+			return 30, 70, StatusFinal // before: Bithumb 30%
+		}
+		return 20, 80, StatusFinal // after: Bithumb 20%
+	})
+	tr.AddListing(Listing{Market: mk(market.Upbit, "RSR"), FirstTrade: first, Source: SourceScan})
+	ms := tr.Snapshot(now).Coins[0].MarketShare
+	if ms == nil || *ms.Before.Share != 30 || *ms.After.Share != 20 {
+		t.Fatalf("market share %+v", ms)
+	}
+	listingHour := first.Unix() / 3600
+	if asked[0] != [2]int64{listingHour - 24, listingHour - 1} || asked[1] != [2]int64{listingHour, now.Unix() / 3600} {
+		t.Fatalf("windows asked %v", asked)
+	}
+	if ms.Before.Status != StatusFinal || ms.After.Status != StatusLive {
+		t.Fatalf("statuses %s %s", ms.Before.Status, ms.After.Status)
+	}
+	// After the 24 hours both windows are 24 whole hours long.
+	later := first.Add(30 * time.Hour)
+	ms = tr.Snapshot(later).Coins[0].MarketShare
+	if hours := (ms.After.To - ms.After.From) / 3600_000; hours != 24 || (ms.Before.To-ms.Before.From)/3600_000 != 24 {
+		t.Fatalf("after window %d hours, before %d", hours, (ms.Before.To-ms.Before.From)/3600_000)
 	}
 }
 

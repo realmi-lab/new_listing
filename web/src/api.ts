@@ -36,6 +36,17 @@ export interface ExchangeInfo {
   last_success_at: number | null;
   last_error?: string;
   cumulative: Cell;
+  recent_hour: Cell;
+}
+
+/** Bithumb's share of the whole KRW market (Bithumb + Upbit) over whole hours. */
+export interface ShareWindow {
+  from: number;
+  to: number;
+  bithumb: number | null;
+  upbit: number | null;
+  share: number | null;
+  status: Status;
 }
 
 export interface NoticeInfo {
@@ -70,6 +81,7 @@ export interface Coin {
   last_hour: Cell;
   recent_hour: Cell;
   recent_hour_from?: number;
+  market_share: { before: ShareWindow; after: ShareWindow } | null;
   notices: NoticeInfo[] | null;
 }
 
