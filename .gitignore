@@ -1,0 +1,11 @@
+/bin/
+/web/node_modules/
+/web/dist/
+/.tmp/
+*.log
+.env
+/internal/webui/dist/*
+!/internal/webui/dist/.keep
+/dist/
+.DS_Store
+/.claude/

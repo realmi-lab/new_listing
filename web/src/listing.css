@@ -1,0 +1,843 @@
+/* Ported from MarketGo Index2 (frontend/client/src/pages/market-index2.css):
+   the same three panes, textures, filter buttons and table rhythm. */
+.nl-terminal {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-sans);
+  font-size: var(--type-caption);
+  line-height: 1.35;
+  /* Break Korean between words, not inside one (부족/한, 시/간봉). */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  -webkit-font-smoothing: antialiased;
+}
+
+.nl-terminal *,
+.nl-terminal *::before,
+.nl-terminal *::after {
+  box-sizing: border-box;
+}
+
+.nl-terminal ::selection {
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.nl-pane {
+  min-width: 0;
+  min-height: 0;
+}
+
+.nl-scroll {
+  height: 100%;
+  overflow: auto;
+  /* Reserve the scrollbar so a pane does not narrow when its content grows. */
+  scrollbar-gutter: stable;
+  padding: 24px;
+}
+
+.nl-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.nl-scroll::-webkit-scrollbar-track {
+  border-left: 1px solid var(--border);
+  background: transparent;
+}
+
+.nl-scroll::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+}
+
+/* Pane widths do not depend on their content: with a content-sized middle
+   pane the three panes shifted by 16px when the table arrived. */
+.nl-overview {
+  flex: 0 0 clamp(260px, 25%, 320px);
+  width: 25%;
+  min-width: 260px;
+  max-width: 320px;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--primary) 7%, var(--card)), var(--card) 65%);
+}
+
+.nl-overview-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.nl-detail {
+  flex: 1 1 0;
+  min-width: 500px;
+  border-right: 1px solid var(--border);
+  background: var(--card);
+}
+
+.nl-visual {
+  flex: 0 0 clamp(240px, 22%, 300px);
+  width: 22%;
+  min-width: 240px;
+  color: var(--foreground);
+  background: var(--card);
+}
+
+.nl-visual-scroll {
+  padding: 12px;
+}
+
+.nl-ascii {
+  margin: 0 0 24px;
+  white-space: pre;
+  font: inherit;
+  font-size: var(--type-caption);
+  font-weight: 400;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.nl-copy {
+  margin: 0;
+  font-size: var(--type-caption);
+}
+
+.nl-date {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 24px;
+  text-transform: uppercase;
+}
+
+.nl-search input {
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  outline: none;
+  color: var(--foreground);
+  background: transparent;
+  font: inherit;
+}
+
+.nl-date input {
+  width: 142px;
+  padding: 4px 6px;
+}
+
+.nl-date input:focus,
+.nl-search input:focus,
+.nl-view-switch button:focus-visible,
+.nl-visual-heading button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.nl-divider {
+  width: 100%;
+  margin: 16px 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--type-caption);
+  letter-spacing: 2px;
+}
+
+.nl-summary-heading,
+.nl-toolbar,
+.nl-visual-heading,
+.nl-grid-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nl-summary-heading strong {
+  text-align: right;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.nl-summary-heading { flex-wrap: wrap; }
+.nl-summary-heading strong { white-space: nowrap; }
+
+.nl-bar {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.nl-bar-large {
+  height: 24px;
+  margin: 12px 0 16px;
+}
+
+.nl-bar-inverse {
+  border-color: var(--border);
+}
+
+.nl-bar-empty {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--type-caption);
+  /* The bar is 14px tall; the caption's default line box is taller and
+     clipped the bottom of "자료 확인 중". */
+  line-height: 1;
+  opacity: 0.65;
+}
+
+.nl-texture {
+  display: inline-block;
+  flex: 0 0 auto;
+  min-width: 1px;
+  height: 100%;
+  border: 1px solid var(--border);
+}
+
+.nl-texture-solid {
+  background: var(--foreground);
+}
+
+.nl-texture-outline {
+  background: transparent;
+}
+
+.nl-texture-slash {
+  background: repeating-linear-gradient(45deg, var(--foreground), var(--foreground) 1px, transparent 1px, transparent 4px);
+}
+
+.nl-texture-backslash {
+  background: repeating-linear-gradient(-45deg, var(--foreground), var(--foreground) 1px, transparent 1px, transparent 4px);
+}
+
+.nl-texture-dots {
+  background-image: radial-gradient(var(--foreground) 1px, transparent 0);
+  background-size: 4px 4px;
+}
+
+.nl-texture-inverse {
+  border-color: var(--border);
+}
+
+.nl-texture-solid.nl-texture-inverse {
+  background: var(--foreground);
+}
+
+.nl-texture-outline.nl-texture-inverse {
+  background: transparent;
+}
+
+.nl-texture-slash.nl-texture-inverse {
+  background: repeating-linear-gradient(45deg, var(--foreground), var(--foreground) 1px, transparent 1px, transparent 4px);
+}
+
+.nl-texture-backslash.nl-texture-inverse {
+  background: repeating-linear-gradient(-45deg, var(--foreground), var(--foreground) 1px, transparent 1px, transparent 4px);
+}
+
+.nl-texture-dots.nl-texture-inverse {
+  background-image: radial-gradient(var(--foreground) 1px, transparent 0);
+}
+
+.nl-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--type-caption);
+  text-transform: uppercase;
+}
+
+.nl-legend li {
+  display: grid;
+  grid-template-columns: 12px 52px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.nl-legend-box {
+  width: 12px;
+  height: 12px;
+}
+
+.nl-status {
+  margin-top: auto;
+  padding-top: 16px;
+  text-transform: uppercase;
+}
+
+.nl-status span,
+.nl-view-switch button.is-selected {
+  border: 1px solid var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.nl-status span {
+  padding: 1px 4px;
+  font-size: var(--type-caption);
+}
+
+.nl-source {
+  margin: 10px 0 0;
+  font-size: var(--type-caption);
+}
+
+.nl-toolbar {
+  margin-bottom: 24px;
+}
+
+.nl-view-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nl-view-switch button,
+.nl-visual-heading button {
+  min-height: 32px;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--foreground);
+  background: transparent;
+  font: inherit;
+  font-size: var(--type-caption);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.nl-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--type-caption);
+  white-space: nowrap;
+}
+
+.nl-search input {
+  width: 136px;
+  padding: 3px 6px;
+}
+
+.nl-search input:disabled {
+  opacity: 0.35;
+}
+
+.nl-detail-copy {
+  max-width: 760px;
+  margin-bottom: 24px;
+}
+
+.nl-alert {
+  margin: 0 0 16px;
+  border: 1px solid var(--border);
+  padding: 8px;
+}
+
+/* Edge shadows show that the table continues to the side, and the
+   scrollbar stays visible instead of appearing only while scrolling. */
+.nl-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+  background:
+    linear-gradient(to right, var(--card) 30%, transparent) left center / 2rem 100% no-repeat local,
+    linear-gradient(to left, var(--card) 30%, transparent) right center / 2rem 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, color-mix(in srgb, var(--foreground) 28%, transparent), transparent) left center / 0.75rem 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, color-mix(in srgb, var(--foreground) 28%, transparent), transparent) right center / 0.75rem 100% no-repeat scroll;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted-foreground) transparent;
+}
+
+.nl-table-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+.nl-table-wrap::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+}
+
+.nl-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; margin: 16px 0 24px; font-size: var(--type-caption); }
+/* Index2's black buttons, drawn from the theme so they stay visible in dark mode. */
+.nl-terminal .nl-filters button { display: inline-flex; align-items: center; justify-content: center; min-height: 26px; max-width: 100%; border: 1px solid var(--foreground); background: var(--foreground); color: var(--background); border-radius: 0; padding: 2px 6px; font: inherit; box-shadow: none; cursor: pointer; }
+.nl-terminal .nl-filters button[aria-expanded="true"] { background: transparent; color: var(--foreground); border-color: currentColor; }
+.nl-terminal .nl-filters button:disabled { opacity: .45; cursor: not-allowed; }
+.nl-filter-list { position: fixed; z-index: 1000; width: 200px; max-width: calc(100vw - 16px); max-height: 200px; overflow-y: auto; background: #000; color: #fff; border: 1px solid #fff; font-family: var(--font-sans); font-size: var(--type-caption); }
+.nl-filter-list button { display: block; width: 100%; padding: 6px 8px; min-height: 30px; border: 0; border-bottom: 1px dotted #ffffff33; border-radius: 0; background: #000; color: #fff; font: inherit; text-align: left; cursor: pointer; }
+.nl-filter-list button:hover, .nl-filter-list button:focus-visible, .nl-filter-list button[aria-selected="true"] { background: #fff; color: #000; }
+@media(max-width:767px) { .nl-terminal .nl-filters button, .nl-filter-list button { min-height: 44px; } }
+.nl-filters > span { flex-basis: 100%; }
+.nl-table th button { color: inherit; background: transparent; border: 0; min-height: 44px; padding: 4px; white-space: nowrap; font-size: var(--type-caption); cursor: pointer; }
+
+.nl-coin-table { min-width: 1120px; }
+.nl-table .nl-venue-cell { min-width: 112px; white-space: nowrap; }
+.nl-venue-cell small { display: block; font-size: var(--type-caption); margin-top: 4px; }
+.nl-table.nl-coin-table .breakdown { width: 180px; min-width: 180px; }
+
+.nl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--type-caption);
+}
+
+.nl-table th,
+.nl-table td {
+  padding: 8px 4px;
+  border-bottom: 1px dotted var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.nl-table thead th {
+  padding-bottom: 12px;
+  border-bottom-style: solid;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
+.nl-table tbody th {
+  font-weight: 400;
+}
+
+.nl-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.nl-table .breakdown {
+  width: 38%;
+  min-width: 150px;
+  padding-left: 12px;
+}
+
+.nl-table .breakdown .nl-bar {
+  display: inline-flex;
+  width: calc(100% - 20px);
+  vertical-align: middle;
+}
+
+.nl-exchange-mark {
+  width: 12px;
+  height: 12px;
+  margin-left: 6px;
+  vertical-align: 3px;
+}
+
+.nl-empty {
+  padding: 28px 4px !important;
+  text-align: center !important;
+}
+
+.nl-table-end {
+  margin-top: 20px;
+  text-align: center;
+  font-size: var(--type-caption);
+  line-height: 1.8;
+  text-transform: uppercase;
+}
+
+.nl-visual-heading {
+  margin-bottom: 16px;
+  text-transform: uppercase;
+}
+
+.nl-visual-heading button {
+  min-height: 28px;
+  border-color: var(--border);
+  color: var(--foreground);
+  background: var(--secondary);
+  font-size: var(--type-caption);
+}
+
+.nl-visual-heading button:focus-visible {
+  outline-color: var(--ring);
+}
+
+.nl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+}
+
+.nl-grid-card {
+  display: flex;
+  aspect-ratio: 1;
+  min-height: 100px;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 6px;
+  border: 1px solid var(--border);
+  font-size: var(--type-caption);
+}
+
+.nl-grid-card:hover {
+  background: var(--accent);
+}
+
+.nl-grid-title {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nl-grid-title strong {
+  font-weight: 400;
+}
+
+.nl-grid-title span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: right;
+  font-size: var(--type-caption);
+}
+
+.nl-mini-chart {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.nl-mini-chart > span {
+  flex: 1 1 0;
+  min-height: 4px;
+}
+
+.nl-grid-card small {
+  margin-top: 4px;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: var(--type-caption);
+}
+
+.nl-visual-empty {
+  grid-column: 1 / -1;
+  padding: 24px 4px;
+  color: var(--muted-foreground);
+}
+
+.nl-visual-legend {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--border);
+  color: var(--muted-foreground);
+  font-size: var(--type-caption);
+}
+
+@media (max-width: 1120px) {
+    .nl-terminal {
+    display: grid;
+    height: auto;
+    min-height: 100%;
+    grid-template-columns: minmax(180px, 30%) minmax(0, 1fr);
+    align-items: stretch;
+    overflow: visible;
+  }
+
+  .nl-overview,
+  .nl-detail,
+  .nl-visual {
+    width: auto;
+    max-width: none;
+  }
+
+  .nl-overview,
+  .nl-detail {
+    min-width: 0;
+  }
+
+  .nl-visual {
+    grid-column: 1 / -1;
+    min-width: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .nl-scroll {
+    height: auto;
+    overflow: visible;
+  }
+
+  .nl-grid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+    .nl-terminal {
+    display: block;
+    font-size: var(--type-caption);
+  }
+
+  .nl-overview,
+  .nl-detail,
+  .nl-visual {
+    min-width: 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nl-scroll,
+  .nl-visual-scroll {
+    padding: 20px 16px;
+  }
+
+  .nl-ascii {
+    font-size: var(--type-caption);
+  }
+
+  .nl-date input,
+  .nl-search input,
+  .nl-view-switch button,
+  .nl-visual-heading button {
+    min-height: 44px;
+    font-size: var(--type-body);
+  }
+
+  .nl-date {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .nl-date input {
+    width: 100%;
+  }
+
+  .nl-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .nl-view-switch button {
+    flex: 1;
+  }
+
+  .nl-search {
+    align-items: stretch;
+    flex-direction: column;
+    font-size: var(--type-caption);
+  }
+
+  .nl-search input {
+    width: 100%;
+  }
+
+  .nl-table-wrap {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .nl-table {
+    width: max-content;
+    min-width: 100%;
+    font-size: var(--type-caption);
+  }
+
+  .nl-table th,
+  .nl-table td {
+    padding: 6px 8px;
+    white-space: nowrap;
+    line-height: 20px;
+  }
+
+  .nl-table .nl-venue-cell {
+    min-width: 112px;
+  }
+
+  .nl-venue-cell small {
+    margin-top: 2px;
+  }
+
+  .nl-table .breakdown {
+    width: 120px;
+    min-width: 120px;
+    padding-left: 8px;
+  }
+
+  .nl-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nl-grid-card {
+    min-height: 142px;
+  }
+}
+
+/* The coin composition bar has no trailing exchange marker. */
+.nl-table.nl-coin-table .breakdown .nl-bar {
+  width: 100%;
+}
+
+.nl-coin-table .breakdown + .nl-venue-cell {
+  width: 112px;
+}
+
+/* Three spaces are about .75em in Pretendard, not three digit-width ch units. */
+.nl-terminal .nl-table.nl-coin-table {
+  width: max-content;
+  min-width: 0;
+}
+.nl-terminal .nl-table .nl-venue-cell {
+  width: auto;
+  min-width: 0;
+  padding-inline: .375em;
+  white-space: nowrap;
+}
+.nl-terminal .nl-venue-cell > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.nl-terminal .nl-venue-cell button {
+  padding-inline: 0;
+}
+.nl-sort-arrow {
+  display: inline-block;
+  transform: scale(.7);
+  transform-origin: center;
+}
+
+.nl-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 12px;
+  font-size: var(--type-caption);
+}
+
+.nl-terminal .nl-more button {
+  min-height: 32px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--foreground);
+  padding: 4px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.nl-terminal .nl-more button:hover,
+.nl-terminal .nl-more button:focus-visible {
+  border-color: currentColor;
+}
+
+/* ---- New listing tracker additions ---- */
+.nl-ascii { margin: 0 0 24px; }
+.nl-counts { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 12px; font-size: var(--type-caption); }
+.nl-counts strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.nl-feeds { margin: 0; display: grid; gap: 8px; font-size: var(--type-caption); }
+.nl-feeds dt { color: var(--muted-foreground); }
+.nl-feeds dd { margin: 2px 0 0; font-variant-numeric: tabular-nums; }
+.nl-status span.is-alert { border-color: var(--alert); background: var(--alert); color: #fff; }
+.nl-alert { color: var(--alert); border-color: var(--alert) !important; }
+.is-alert { color: var(--alert); }
+
+.nl-table td small, .nl-table th small { display: block; margin-top: 2px; color: var(--muted-foreground); font-size: var(--type-caption); }
+.nl-table tbody tr { cursor: default; }
+.nl-coin-table tbody tr, .nl-hour-table tbody tr { cursor: pointer; }
+.nl-table tbody tr:hover { background: var(--accent); }
+.nl-table tbody tr.is-selected { background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.nl-row-button { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.nl-row-button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.nl-table th .nl-row-button { min-height: 0; }
+.nl-coin-table { min-width: 1080px; }
+.nl-chip { display: inline-block; padding: 1px 4px; border: 1px solid var(--border); white-space: nowrap; }
+.nl-chip-tracking { border-color: var(--primary); color: var(--primary-foreground); background: var(--primary); }
+.nl-chip-waiting { border-style: dashed; }
+
+.nl-hour-table { width: max-content; }
+.nl-hour-table th, .nl-hour-table td { white-space: nowrap; }
+.nl-hour-table .nl-sticky-ex { position: sticky; left: 0; z-index: 1; background: var(--card); width: 92px; min-width: 92px; }
+.nl-hour-table .nl-sticky { position: sticky; left: 92px; z-index: 1; background: var(--card); min-width: 108px; }
+.nl-hour-cell { min-width: 56px; }
+.nl-hour-cell.is-live { outline: 1px solid var(--primary); outline-offset: -2px; font-weight: 600; }
+.nl-hour-cell.is-pending { color: var(--muted-foreground); }
+.nl-hour-cell.is-partial { text-decoration: underline dotted; }
+.nl-hour-cell.is-provisional { font-style: italic; }
+
+.nl-notice-table { min-width: 760px; }
+.nl-notice-title a { color: inherit; text-underline-offset: 3px; }
+.nl-notice-title { white-space: normal; min-width: 280px; }
+
+.nl-detail-card { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px dashed var(--border); }
+.nl-detail-card .nl-visual-heading { margin-bottom: 4px; }
+.nl-detail-exchanges { margin: 12px 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: var(--type-caption); }
+.nl-detail-exchanges li { display: grid; grid-template-columns: 44px 1fr auto; gap: 4px 8px; align-items: baseline; }
+.nl-detail-exchanges .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nl-ex-name.nl-ex-bithumb { color: var(--primary); }
+.nl-ex-name.nl-ex-upbit { color: var(--upbit); }
+.nl-detail-exchanges small { grid-column: 1 / -1; }
+.nl-detail-notices { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: var(--type-caption); }
+.nl-detail-notices a { color: inherit; }
+.nl-mini-table { margin-top: 12px; }
+.nl-mini-table th, .nl-mini-table td { padding: 4px 2px; }
+.nl-mini-table tr.is-live td { font-weight: 600; }
+
+.nl-hour-bars { display: flex; align-items: flex-end; gap: 1px; height: 96px; margin: 12px 0 4px; border-bottom: 1px solid var(--border); }
+.nl-hour-bars.is-compact { height: auto; flex: 1; min-height: 40px; margin: 8px 0 0; }
+.nl-hour-bar { display: flex; flex: 1 1 0; flex-direction: column-reverse; min-width: 0; }
+.nl-hour-bar > .nl-texture { width: 100%; min-height: 0; flex: 0 0 auto; }
+.nl-hour-bar.is-live { outline: 1px solid var(--primary); }
+.nl-hour-bar.is-partial { opacity: .55; }
+
+.nl-grid-card { color: inherit; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.nl-grid-card.is-selected { outline: 2px solid var(--primary); outline-offset: -2px; }
+.nl-grid-card:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.nl-grid-title { display: flex; }
+
+@media (max-width: 1120px) {
+  .nl-terminal { height: auto; min-height: 100vh; }
+}
+@media (max-width: 767px) {
+  .nl-hour-table .nl-sticky-ex { width: 64px; min-width: 64px; }
+  .nl-hour-table .nl-sticky { left: 64px; min-width: 88px; }
+}
+
+.nl-theme-toggle { align-self: flex-start; margin-top: 12px; min-height: 32px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 0; color: var(--foreground); background: transparent; font: inherit; font-size: var(--type-caption); cursor: pointer; }
+.nl-theme-toggle:hover, .nl-theme-toggle:focus-visible { border-color: currentColor; outline: none; }
+.nl-chip-loading { border-style: dotted; color: var(--muted-foreground); }
+
+/* The newly listing exchange written before each coin. */
+.nl-ex-tag { font-variant-numeric: normal; white-space: nowrap; }
+.nl-ex-tag.is-manual { color: var(--muted-foreground); }
+.nl-ex-cell { white-space: nowrap; }
+.nl-table tbody tr:hover .nl-sticky, .nl-table tbody tr:hover .nl-sticky-ex { background: var(--accent); }
+
+/* Upbit is purple everywhere it is drawn; Bithumb keeps Index2's solid texture. */
+.nl-texture.nl-ex-upbit { background: var(--upbit); border-color: var(--upbit); }
+.nl-ex-tag .nl-ex-upbit { color: var(--upbit); }
+.nl-ex-tag .nl-ex-bithumb { color: var(--primary); }
+.nl-venue-name.nl-ex-upbit { color: var(--upbit); }
+.nl-mini-table td small, .nl-mini-table th small { font-size: 0.6875rem; }
+.nl-detail-card .nl-bar { margin: 8px 0 4px; }
+
+/* Hourly view: rows of one coin are grouped, the total row stands out. */
+.nl-hour-table tr.nl-group-start > * { border-top: 1px solid var(--muted-foreground); }
+.nl-hour-table tr.nl-total-row td, .nl-hour-table tr.nl-total-row th { font-weight: 600; }
+.nl-kind { color: var(--muted-foreground); }
+.nl-kind.is-new { color: var(--foreground); font-weight: 600; }
+.nl-kind.is-new.nl-ex-upbit { color: var(--upbit); }
+.nl-kind.is-new.nl-ex-bithumb { color: var(--primary); }
+.nl-venue-name small { display: block; font-weight: 400; }
+.nl-status small { display: block; margin-top: 6px; color: var(--muted-foreground); font-size: var(--type-caption); text-transform: none; }
+.nl-overview .nl-copy { font-size: var(--type-body); }
+
+/* Filters sit in the left pane under the counts. */
+.nl-overview .nl-filters { margin: 16px 0 0; }
+.nl-overview .nl-filters > span { color: var(--muted-foreground); }
+.nl-hour-cell { min-width: 64px; }

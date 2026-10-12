@@ -1,0 +1,40 @@
+/* Index2's tokens from the MarketGo screen (index.css .dark and :root).
+   Dark is the default; the screen's toggle sets data-theme="light". */
+:root {
+  color-scheme: dark;
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Malgun Gothic", system-ui, "Noto Sans KR", sans-serif;
+  --type-caption: 0.8125rem;
+  --type-body: 1rem;
+  --background: oklch(0.115 0.02 255);
+  --foreground: oklch(0.92 0.005 250);
+  --card: oklch(0.16 0.018 255 / 94%);
+  --primary: oklch(0.78 0.15 75);
+  --primary-foreground: oklch(0.15 0.02 75);
+  --secondary: oklch(0.205 0.02 255);
+  --muted-foreground: oklch(0.69 0.01 250);
+  --accent: oklch(0.245 0.025 255);
+  --border: oklch(1 0 0 / 10%);
+  --ring: oklch(0.78 0.15 75);
+  --alert: #ff8a80;
+  --upbit: #a78bfa;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --background: #f5f5f7;
+  --foreground: #1d1d1f;
+  --card: rgb(255 255 255 / 96%);
+  --primary: #9a4600;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f2f7;
+  --muted-foreground: #606064;
+  --accent: #e9e9ef;
+  --border: rgb(60 60 67 / 16%);
+  --ring: #9a4600;
+  --alert: #b3261e;
+  --upbit: #7c3aed;
+}
+
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--background); color: var(--foreground); font-family: var(--font-sans); }
