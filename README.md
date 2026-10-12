@@ -86,47 +86,70 @@
 | 윈도우 API | `kernel32.dll`의 `SetConsoleOutputCP(65001)`, `SetConsoleCP(65001)`. 콘솔 창의 한글이 깨지지 않게 UTF-8로 바꾸는 것뿐입니다 |
 | 콘솔 출력 | 진행 상황(상장 감지, 최근 상장, 오류)을 콘솔 창에만 출력합니다 |
 
-## 5. 주요 Go 파일과 기능
+## 5. 실제로 돌아가는 내용
+
+### 켤 때 순서
+
+1. `main.go` `main()` — 윈도우면 콘솔을 UTF-8로 바꿉니다(`console_windows.go` `useUTF8Console()`).
+2. `main.go` `run()` — 실행 옵션을 읽고 부품을 만듭니다.
+   - 외부 요청 출입구 `restclient.New()`
+   - 캔들 조회 `candles.NewClient()`
+   - 추적 저장소(메모리) `tracker.New()`
+   - 마켓 목록 감시 `registry.New()`
+   - 최근 상장 찾기 `discovery.New()`
+   - 공지 감시 `notices.NewWatcher()`
+3. `127.0.0.1:8770`을 엽니다. 이 PC 주소면 `httpapi` `LoopbackOnly()`로 `Host` 확인을 켭니다.
+4. 콘솔에 시작 요약을 출력합니다(`console.go` `banner()`).
+5. 아래 작업들을 동시에 시작합니다.
+6. 기본 브라우저로 화면 주소를 엽니다(`main.go` `openBrowser()`, `-no-browser`면 생략).
+7. Ctrl+C(종료 신호)를 받으면 화면 서버를 닫고 모든 작업을 멈춘 뒤 끝냅니다.
+
+### 켜져 있는 동안 돌아가는 작업
+
+| 작업 | 개수 | 주기 | 파일 · 함수 | 하는 일 |
+| --- | --- | --- | --- | --- |
+| 마켓 목록 감시 | 거래소별 1개 | 5초 | `registry.go` `Run()` → `PollOnce()` → `Diff()` | 마켓 목록을 받아 이전 목록과 비교합니다. 새 원화 마켓이면 `tracker.AddListing()`에 넘깁니다 |
+| 최근 상장 찾기 | 거래소별 1개 | 켤 때 한 번 | `main.go` `scan()` → `discovery.go` `Scan()` → `check()` | 첫 마켓 목록을 받은 뒤 원화 마켓마다 일봉을 보고, 최근 7일 안에 처음 거래된 마켓의 첫 체결 분을 찾아 `tracker.AddListing()`에 넘깁니다 |
+| 1분봉 수집 | 거래소별 1개 | 계속 (추적 중인 마켓당 약 1초, 첫 체결 대기 마켓은 3초) | `fetch.go` `RunFetcher()` → `nextJob()` → `planLocked()` → `execute()` → `apply()` | 마켓마다 필요한 일을 고릅니다: 첫 체결 찾기, 빈 구간 채우기(`candles.go` `MinuteRange()`), 최신 몇 분 다시 읽기(`candles.go` `Minutes()`). 끝난 1분은 확정하고 진행 중인 1분은 갱신합니다 |
+| 공지 감시 | 거래소별 1개 | 빗썸 3초, 업비트 5초 | `watcher.go` `Run()` → `poll()` → `notices.go` `ParseBithumb()` / `ParseUpbitList()` → `Classify()` | 공지 목록을 읽어 상장 공지를 골라 `tracker.AddNotice()`에 넣습니다. 새 상장 공지면 그 거래소의 마켓 목록을 바로 다시 확인합니다(같은 거래소는 2초에 한 번까지) |
+| 상태 정리 | 1개 | 1초 | `tracker.go` `Maintain()` | 7일이 지난 추적을 지우고, 같은 코인을 가진 다른 거래소 마켓을 붙이고, `-watch` 코인을 시작합니다 |
+| 화면 서버 | 1개 | 요청이 올 때 | `server.go` `Handler()` → `snapshot.go` `Snapshot()` | 메모리의 자료로 +1~+24시간, 누적, 최근 1시간, 비중을 계산해 JSON으로 보냅니다. `/api/stream`은 1초마다 보냅니다 |
+
+모든 외부 요청은 `restclient.go` `Get()` 하나를 거칩니다. 거래소별 요청 간격, 429/418 대기, 응답 8MB 제한, 리다이렉트 제한이 여기서 적용됩니다.
+
+### 자료 흐름
+
+```text
+업비트·빗썸 마켓 목록 ──▶ registry (신규 상장 판별) ──┐
+켤 때 일봉·10분봉·1분봉 ──▶ discovery (최근 7일 상장) ─┼──▶ tracker (메모리) ──▶ snapshot ──▶ 127.0.0.1:8770 화면
+업비트·빗썸 공지 목록 ──▶ notices (상장 공지 판별) ────┘          ▲
+                                       1분봉 ──▶ fetch (확정·진행 중) ┘
+
+외부 요청은 모두 restclient.Get() → 업비트·빗썸 HTTPS GET
+```
+
+### 실행 파일에 들어가는 Go 파일
 
 모든 Go 코드는 표준 라이브러리만 사용합니다.
 
-### `cmd/listing-tracker/` — 실행 진입점
-
 | 파일 | 기능 |
 | --- | --- |
-| `main.go` | 프로그램 시작과 종료. `run()`이 실행 옵션을 읽고 각 부품을 만들어 연결합니다. 마켓 목록 감시, 공지 감시, 최근 상장 찾기, 거래소별 1분봉 수집, 1초마다 상태 정리, 화면 서버를 각각 실행합니다. `scan()`은 첫 마켓 목록을 받은 뒤 최근 상장 찾기를 시작합니다. `openBrowser()`는 화면 주소를 기본 브라우저로 엽니다. Ctrl+C(종료 신호)를 받으면 화면 서버를 닫고 끝냅니다 |
-| `console.go` | 콘솔 출력. `banner()`는 시작 요약, `line()`은 `시각  거래소  내용` 한 줄, `usage()`는 `-h` 한글 안내, `consoleHandler`는 경고·오류 기록의 한글 형식입니다 |
-| `console_windows.go` | 윈도우에서만 쓰입니다. `useUTF8Console()`이 콘솔 코드 페이지를 UTF-8로 바꿉니다 |
-| `console_other.go` | 윈도우가 아닌 OS용 빈 함수입니다 |
-
-### `internal/` — 기능 부품
-
-| 파일 | 기능 |
-| --- | --- |
-| `market/market.go` | 거래소(업비트·빗썸)와 마켓 정의, 마켓 목록 주소. `ParseMarketList()`는 마켓 목록 응답에서 원화 마켓만 꺼냅니다. 응답이 JSON 배열이 아니면 거부합니다 |
-| `registry/registry.go` | 신규 상장 감지. `Run()`이 거래소별로 5초마다 `PollOnce()`를 부릅니다. `Diff()`는 새 목록과 아는 목록을 비교해 신규·재상장을 찾습니다. 첫 목록은 기준이고, 3번 연속 빠져야 목록에서 지우며, 빈 응답이나 절반 이하로 줄어든 응답은 거부합니다. `ActiveMarketsForBase()`는 같은 코인을 가진 거래소를 알려 줍니다. 저장은 하지 않습니다 |
-| `discovery/discovery.go` | 켤 때 최근 상장 찾기. `Scan()`이 원화 마켓마다 `check()`를 부릅니다. `check()`는 일봉 → 10분봉 → 1분봉 순서로 첫 체결 분을 찾고, `firstDayInWindow()`는 첫 거래일(또는 3일 넘게 쉬고 다시 거래된 날)이 최근 7일 안인지 판단합니다. `Progress()`는 진행률을 화면에 줍니다 |
-| `candles/candles.go` | 캔들 조회. `Minutes()`·`Days()`가 1분봉·10분봉·일봉을 요청하고, `Parse()`가 응답을 읽습니다(음수·잘못된 형식 거부). `MinuteRange()`는 원하는 구간의 1분봉을 200개씩 거꾸로 넘겨 가며 모읍니다. `formatTo()`는 거래소마다 다른 기준 시각 형식(업비트 UTC, 빗썸 한국시각)을 만듭니다 |
-| `tracker/tracker.go` | 추적 대상 관리. `AddListing()`이 상장을 받아 코인별 추적을 만들거나, 24시간 안의 같은 코인과 묶습니다. 기준 시각은 신규 마켓들 중 가장 이른 첫 체결입니다. `Maintain()`은 1초마다 7일이 지난 추적을 지우고, 같은 코인을 가진 다른 거래소 마켓을 붙입니다. `AddManual()`은 `-watch`로 지정한 코인을, `AddNotice()`는 공지를 받습니다 |
-| `tracker/fetch.go` | 1분봉 수집 순서. `RunFetcher()`가 거래소마다 하나씩 돌며 `nextJob()`으로 가장 오래 기다린 작업을 고릅니다. `planLocked()`는 각 마켓에 필요한 일을 정합니다: 첫 체결 찾기, 빈 구간 채우기, 최신 몇 분 다시 읽기. `apply()`는 결과를 넣고, 실패하면 2초부터 최대 60초까지 기다립니다. `addFinal()`은 끝난 1분을 확정 구간에 넣습니다. 확정 구간은 항상 이어져 있습니다 |
-| `tracker/snapshot.go` | 화면 자료 만들기. `Snapshot()`이 코인별 +1~+24시간, 누적, 최근 1시간, 거래소별 비중, 상장 공지 연결을 계산합니다. `minute()`은 1분을 확정·진행 중·미확인으로 구분하고, `span()`과 `combine()`은 구간 합계와 상태(확정, 진행 중, 확정 중, 일부 미확인, 대기, 미상장)를 정합니다. 비중은 여기서 계산해 화면은 받은 값을 그대로 보여 줍니다 |
-| `notices/notices.go` | 공지 해석. `ParseBithumb()`·`ParseUpbitList()`가 공지 목록을 읽습니다. `Classify()`는 제목으로 상장 공지를 판별하고(예: "신규 거래지원", "마켓 추가"), "종료·유의·이벤트" 등이 들어간 공지는 뺍니다. 괄호 안의 코인 기호를 꺼내고 원화 마켓 여부를 표시합니다 |
-| `notices/watcher.go` | 공지 감시. `Run()`이 빗썸 공지를 3초마다, 업비트 공지 목록을 5초마다 읽고, `Statuses()`가 마지막 성공·오류를 화면에 줍니다 |
-| `restclient/client.go` | 모든 외부 요청의 출입구. `Get()`이 거래소·그룹별 간격을 지키며 GET을 보내고 응답을 8MB까지 읽습니다. 429/418이면 기다리고, 업비트 `Remaining-Req`를 따릅니다. `NewHTTPClient()`는 리다이렉트를 거래소 도메인의 https로만 허용합니다. `Now()`는 `Date` 헤더로 보정한 시각입니다. `SetUpbitRate()`는 `-upbit-rate` 옵션입니다 |
-| `httpapi/server.go` | 이 PC 안의 화면 서버. `Handler()`가 `/api/snapshot`, `/api/stream`, 화면 파일을 GET으로만 제공합니다. `LoopbackOnly()`와 `checkHost()`가 이 PC 이름이 아닌 `Host`를 거부하고, `stream()`은 동시 64개까지 1초마다 자료를 보냅니다. 자료는 0.5초 동안 재사용해 보는 사람이 많아도 계산이 늘지 않습니다 |
-| `webui/webui.go` | 빌드한 화면 파일(`dist/`)을 실행 파일 안에 넣습니다(`go:embed`) |
-
-### 테스트 (`*_test.go`)
-
-| 파일 | 확인하는 것 |
-| --- | --- |
-| `registry/registry_test.go` | 기준선, 신규·재상장, 한 번 빠진 마켓은 신규가 아님, 빈·급감 응답 거부 |
-| `discovery/discovery_test.go` | 최근 상장의 첫 체결 분, 재상장, 아직 거래 없는 마켓, 7일 지난 마켓 제외 |
-| `candles/candles_test.go` | 캔들 해석, 오류·음수 거부, 200개씩 페이지 넘김, 거래소별 기준 시각 형식 |
-| `tracker/tracker_test.go` | 늦게 켜도 24시간 재구성, 확정·진행 중·대기 구분, 첫 체결 대기, 읽기 실패 뒤 미확인 표시와 복구, 거래소 묶기, 7일 지난 추적 제거 |
-| `notices/notices_test.go` | 상장 공지 판별과 코인 기호 추출, 빗썸·업비트 공지 해석 |
-| `restclient/client_test.go` | 리다이렉트를 거래소 도메인 https로만 허용, `Remaining-Req` 해석 |
-| `httpapi/server_test.go` | 이 PC 이름이 아닌 `Host` 거부, GET 외 요청 거부 |
+| `cmd/listing-tracker/main.go` | 시작·종료와 부품 연결. `run()` 부품 생성과 작업 시작, `scan()` 켤 때 최근 상장 찾기, `openBrowser()` 화면 열기 |
+| `cmd/listing-tracker/console.go` | 콘솔 출력. `banner()` 시작 요약, `line()` `시각  거래소  내용` 한 줄, `usage()` `-h` 한글 안내, `consoleHandler` 경고·오류 형식 |
+| `cmd/listing-tracker/console_windows.go` | 윈도우 전용. `useUTF8Console()`이 `kernel32.dll` `SetConsoleOutputCP`·`SetConsoleCP`(65001)로 콘솔을 UTF-8로 바꿉니다 |
+| `cmd/listing-tracker/console_other.go` | 윈도우가 아닌 OS용 빈 함수 |
+| `internal/market/market.go` | 거래소·마켓 정의와 마켓 목록 주소. `ParseMarketList()`가 원화 마켓만 꺼내고, JSON 배열이 아니면 거부합니다 |
+| `internal/registry/registry.go` | 신규 상장 감지. `Diff()`가 첫 목록을 기준으로 삼아 신규·재상장을 찾습니다. 3번 연속 빠져야 목록에서 지우고, 빈 응답이나 절반 이하로 줄어든 응답은 거부합니다. `ActiveMarketsForBase()`는 같은 코인을 가진 거래소를 알려 줍니다. 아무것도 저장하지 않습니다 |
+| `internal/discovery/discovery.go` | 켤 때 최근 상장 찾기. `check()`가 일봉 → 10분봉 → 1분봉으로 첫 체결 분을 찾고, `firstDayInWindow()`가 첫 거래일(또는 3일 넘게 쉬고 다시 거래된 날)이 7일 안인지 판단합니다. `Progress()`는 진행률입니다 |
+| `internal/candles/candles.go` | 캔들 조회. `Minutes()`·`Days()` 요청, `Parse()` 응답 해석(음수·잘못된 형식 거부), `MinuteRange()` 200개씩 거꾸로 넘기며 구간 모으기, `formatTo()` 거래소별 기준 시각 형식(업비트 UTC, 빗썸 한국시각) |
+| `internal/tracker/tracker.go` | 추적 대상 관리(메모리). `AddListing()`은 코인별 추적을 만들거나, 24시간 안의 같은 코인과 묶습니다. 기준 시각은 신규 마켓 중 가장 이른 첫 체결입니다. `Maintain()`은 1초마다 정리하고, `AddManual()`은 `-watch` 코인, `AddNotice()`는 공지를 받습니다 |
+| `internal/tracker/fetch.go` | 1분봉 수집 순서. `nextJob()`이 가장 오래 기다린 마켓을 고르고, `planLocked()`가 할 일을 정하고, `apply()`가 결과를 넣습니다. 실패하면 2초부터 최대 60초까지 기다립니다. `addFinal()`은 끝난 1분을 확정 구간에 넣고, 확정 구간은 항상 이어져 있습니다 |
+| `internal/tracker/snapshot.go` | 화면 자료 계산. `Snapshot()`이 코인별 +1~+24시간, 누적, 최근 1시간, 거래소별 비중, 공지 연결을 만듭니다. `minute()`은 1분을 확정·진행 중·미확인으로 구분하고, `span()`·`combine()`은 구간 합계와 상태를 정합니다 |
+| `internal/notices/notices.go` | 공지 해석. `ParseBithumb()`·`ParseUpbitList()`가 목록을 읽습니다. `Classify()`는 제목으로 상장 공지를 판별하고(예: "신규 거래지원", "마켓 추가"; "종료·유의·이벤트" 등은 제외), 괄호 안 코인 기호와 원화 여부를 꺼냅니다 |
+| `internal/notices/watcher.go` | 공지 감시. `Run()`이 빗썸 3초·업비트 5초마다 읽고, `Statuses()`가 마지막 성공·오류를 화면에 줍니다 |
+| `internal/restclient/client.go` | 외부 요청 출입구. `Get()` 거래소·그룹별 간격과 429/418 대기, `NewHTTPClient()` 리다이렉트를 거래소 도메인 https로만 허용, `Now()` `Date` 헤더로 보정한 시각, `SetUpbitRate()` `-upbit-rate` 옵션 |
+| `internal/httpapi/server.go` | 이 PC 안의 화면 서버. `Handler()`가 `/api/snapshot`·`/api/stream`·화면 파일을 GET으로만 제공합니다. `checkHost()`는 이 PC 이름이 아닌 `Host`를 거부하고, `stream()`은 동시 64개까지 1초마다 보냅니다. 자료는 0.5초 동안 재사용합니다 |
+| `internal/webui/webui.go` | 빌드한 화면 파일을 실행 파일 안에 넣습니다(`go:embed`) |
 
 ## 6. 화면 파일 (`web/`)
 
@@ -158,7 +181,6 @@
 필요한 것: Go 1.26 이상, Node.js와 npm. 이 저장소의 결과물은 Go 1.27.0, Node 26.8.1로 만들었습니다.
 
 ```sh
-go test ./...                  # Go 테스트
 VERSION=1.0.0 ./scripts/build.sh
 ```
 
