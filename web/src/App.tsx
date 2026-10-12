@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useSnapshot, type Cell, type Coin, type Hour, type NoticeInfo, type Snapshot } from "./api";
 import { FilterButton } from "./FilterButton";
 import {
-  EXCHANGES, EXCHANGE_NAME, STATE_LABEL, TEXTURES, formatChange, formatEok, formatElapsed, formatKRW,
+  EXCHANGES, EXCHANGE_NAME, STATE_LABEL, TEXTURES, formatChange, formatEok, formatKRW,
   formatKST, formatKSTTime, formatShare, statusLabel,
 } from "./format";
 import { applyTheme, savedTheme, type Theme } from "./theme";
@@ -68,9 +68,11 @@ function stateLabel(coin: Coin, now: number): string {
   return STATE_LABEL[coin.state];
 }
 
+/** Time since listing as the hour in progress, +1 to +24, like the hourly view. */
 function elapsedLabel(coin: Coin, now: number): string {
-  if (coin.state === "COMPLETE" || (coin.end_at != null && now >= coin.end_at)) return "24시간";
-  return formatElapsed(coin.anchor_at, now);
+  if (coin.anchor_at == null) return "대기";
+  if (coin.state === "COMPLETE" || (coin.end_at != null && now >= coin.end_at)) return "+24시간";
+  return `+${Math.min(Math.max(coin.current_hour, 1), 24)}시간`;
 }
 
 function listingLabel(coin: Coin): string {
@@ -259,7 +261,7 @@ export default function App() {
             </label>
           </div>
           <p className="nl-copy nl-detail-copy">
-            {view === "coins" && "누적은 첫 체결부터 지금(최대 24시간)까지, 최근 1시간은 지금까지의 직전 60분, 현재 시간은 첫 체결 기준으로 진행 중인 1시간입니다."}
+            {view === "coins" && "누적은 +1시간부터 지금(최대 +24시간)까지 시간별 거래금액을 더한 값입니다. 시간별 값은 1분봉 60개의 합이고 일봉은 쓰지 않습니다. 최근 1시간은 지금까지의 직전 60분입니다."}
             {view === "hours" && `+1시간은 첫 체결 시각부터 60분입니다. ${hourMode === "hour" ? "각 칸은 그 1시간의 거래금액" : "각 칸은 상장 후 그 시간까지의 누적 거래금액"}입니다.`}
             {view === "notices" && `최근 ${lookbackDays}일의 상장 관련 공지입니다. 공지는 예고이고, 실제 상장 시각은 마켓 목록과 첫 1분봉으로 확인합니다.`}
           </p>
@@ -323,11 +325,11 @@ function CoinTable({ coins, total, sort, onSort, amount, now, selected, onSelect
       <SortHeading label="상장 거래소" field="exchange" sort={sort} onSort={onSort} />
       <SortHeading label="코인" field="name" sort={sort} onSort={onSort} />
       <SortHeading label="상장(첫 체결)" field="listed" sort={sort} onSort={onSort} />
-      <th>경과</th>
+      <th>상장 이후</th>
       <SortHeading className="num" label="누적" field="cumulative" sort={sort} onSort={onSort} />
       <SortHeading className="num" label="최근 1시간" field="recent" sort={sort} onSort={onSort} />
       <SortHeading className="num" label="현재 시간" field="current" sort={sort} onSort={onSort} />
-      <SortHeading className="num" label="직전 시간 대비" field="change" sort={sort} onSort={onSort} />
+      <SortHeading className="num" label="-1시간 대비" field="change" sort={sort} onSort={onSort} />
       <th className="breakdown">거래소 구성</th>
       {EXCHANGES.map(([id, name]) => <SortHeading key={id} className={`num nl-venue-cell nl-venue-name nl-ex-${id}`} label={name} field={`ex:${id}`} sort={sort} onSort={onSort} />)}
       <th>상태</th>
@@ -455,7 +457,7 @@ function CoinDetail({ coin, amount, now }: { coin: Coin | null; amount: (v: numb
   const listed = EXCHANGES.filter(([id]) => coin.exchanges[id]?.listed);
   return <div className="nl-detail-card">
     <div className="nl-visual-heading"><span><CoinName coin={coin} /> {coin.korean_name}</span><span>{stateLabel(coin, now)}</span></div>
-    <p className="nl-source">첫 체결 {formatKST(coin.anchor_at)} · 경과 {elapsedLabel(coin, now)}</p>
+    <p className="nl-source">첫 체결 {formatKST(coin.anchor_at)} · 상장 이후 {elapsedLabel(coin, now)}</p>
     <div className="nl-summary-heading"><span>누적 (최대 24시간)</span><strong>{amount(coin.cumulative.amount)}</strong></div>
     <TextureBar segments={cellSegments(coinExchangeCells(coin))} label={`${coin.base} 거래소 구성`} />
     <ul className="nl-detail-exchanges">

@@ -55,14 +55,6 @@ export function formatKSTTime(ms: number | null | undefined): string {
   return ms ? kstTime.format(new Date(ms)) : "—";
 }
 
-export function formatElapsed(fromMs: number | null | undefined, nowMs: number): string {
-  if (!fromMs) return "—";
-  const minutes = Math.max(0, Math.floor((nowMs - fromMs) / 60_000));
-  const hours = Math.floor(minutes / 60);
-  if (hours >= 24) return `${Math.floor(hours / 24)}일 ${hours % 24}시간`;
-  return hours ? `${hours}시간 ${minutes % 60}분` : `${minutes}분`;
-}
-
 export const STATUS_LABEL: Record<Status, string> = {
   FINAL: "확정",
   LIVE: "진행 중",

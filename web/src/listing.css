@@ -841,3 +841,11 @@
 .nl-overview .nl-filters { margin: 16px 0 0; }
 .nl-overview .nl-filters > span { color: var(--muted-foreground); }
 .nl-hour-cell { min-width: 64px; }
+
+/* Faint column lines in every table, lighter than the dotted row lines. */
+.nl-table th + th, .nl-table th + td, .nl-table td + td, .nl-table td + th { border-left: 1px solid var(--grid-line); }
+
+/* Column names are centered; the values keep their own alignment. */
+.nl-terminal .nl-table thead th, .nl-terminal .nl-table thead th.num { text-align: center; }
+.nl-terminal .nl-table thead th > button { margin: 0 auto; }
+.nl-terminal .nl-table thead .nl-venue-cell > div { align-items: center; }
