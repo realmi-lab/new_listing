@@ -358,6 +358,15 @@ function CoinTable({ coins, total, sort, onSort, amount, now, selected, onSelect
   </table>;
 }
 
+/** Each exchange row shows its own first trade; the total row the coin's
+ *  anchor, the earliest first trade of its new markets. */
+function rowTime(coin: Coin, exchange: string | null): string {
+  if (exchange == null) return coin.anchor_at ? `기준 ${formatKST(coin.anchor_at)}` : "첫 체결 대기";
+  const info = coin.exchanges[exchange];
+  if (!info?.newly_listed) return "기존 상장";
+  return info.first_trade_at ? formatKST(info.first_trade_at) : "첫 체결 대기";
+}
+
 function HourTable({ coins, mode, amount, selected, onSelect, loading }: {
   coins: Coin[]; mode: "hour" | "cumulative"; amount: (v: number | null | undefined) => string;
   selected: string | null; onSelect: (key: string) => void; loading: boolean;
@@ -387,7 +396,7 @@ function HourTable({ coins, mode, amount, selected, onSelect, loading }: {
           </td>
           <th scope="row" className="nl-sticky">
             <button type="button" className="nl-row-button" onClick={() => onSelect(row.coin.key)}>{row.coin.base}</button>
-            {first && <small>{row.coin.anchor_at ? formatKST(row.coin.anchor_at) : "대기"}</small>}
+            <small>{rowTime(row.coin, row.total ? null : row.id)}</small>
           </th>
           {indexes.map(index => {
             const hour = row.coin.hours?.[index - 1];
