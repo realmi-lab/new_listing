@@ -45,7 +45,7 @@ func banner(version, url, lookback string) {
 	fmt.Printf("  화면 주소     %s\n", url)
 	fmt.Printf("  찾는 범위     최근 %s 상장, 상장 후 24시간\n", lookback)
 	fmt.Printf("  상장 공지     업비트 공지 목록 · 빗썸 공지 API\n")
-	fmt.Printf("  빗썸 점유율   빗썸 ÷ (빗썸+업비트), 원화 마켓 전체 시간봉\n")
+	fmt.Printf("  빗썸 점유율   국내 5사 전체 마켓 시간봉 (빗썸 인덱스 기준)\n")
 	fmt.Printf("  종료          Ctrl+C 또는 창 닫기\n")
 	fmt.Println(strings.Repeat("-", 48))
 }

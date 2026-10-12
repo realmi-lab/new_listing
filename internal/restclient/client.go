@@ -59,6 +59,12 @@ func minimumGap(exchange market.Exchange, group Group) time.Duration {
 		return 3 * time.Second // web announcement list: no published limit, stay gentle
 	case exchange == market.Upbit:
 		return 125 * time.Millisecond // at most 8/s of the 10/s group budget
+	case exchange == "coinone":
+		return 100 * time.Millisecond // documented public limit 1,200 per minute
+	case exchange == "korbit":
+		return 100 * time.Millisecond // documented public limit 50 per second
+	case exchange == "gopax":
+		return 250 * time.Millisecond // documented public limit 20 per second
 	default:
 		return 20 * time.Millisecond // at most 50/s of Bithumb's 150/s category budget
 	}
@@ -115,12 +121,12 @@ func (c *Client) observeDate(header string, sent, received time.Time) {
 	c.offset.Store(int64(previous + (measured-previous)/8))
 }
 
-// allowedHost reports whether a redirect may go to host: only the two
+// allowedHost reports whether a redirect may go to host: only the five
 // exchanges' own domains (Bithumb's notice API answers with a redirect to
 // feed-api.bithumb.com).
 func allowedHost(host string) bool {
 	host = strings.ToLower(host)
-	for _, domain := range []string{"upbit.com", "bithumb.com"} {
+	for _, domain := range []string{"upbit.com", "bithumb.com", "coinone.co.kr", "korbit.co.kr", "gopax.co.kr"} {
 		if host == domain || strings.HasSuffix(host, "."+domain) {
 			return true
 		}
@@ -129,7 +135,7 @@ func allowedHost(host string) bool {
 }
 
 // NewHTTPClient follows at most three redirects, each to an https address
-// of Upbit or Bithumb.
+// of one of the five exchanges.
 func NewHTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{
 		Timeout: timeout,

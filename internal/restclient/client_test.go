@@ -11,6 +11,7 @@ func TestRedirectsStayOnExchangeDomains(t *testing.T) {
 	for raw, allowed := range map[string]bool{
 		"https://feed-api.bithumb.com/v1/notices": true,
 		"https://api.upbit.com/v1/market/all":     true,
+		"https://api.korbit.co.kr/v2/candles":     true,
 		"http://feed-api.bithumb.com/v1/notices":  false,
 		"https://bithumb.com.evil.example/":       false,
 		"https://evilbithumb.com/":                false,

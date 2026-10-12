@@ -304,12 +304,12 @@ func TestMarketShareComparesTheDayBeforeWithTheTimeSince(t *testing.T) {
 	tr := New(fakeLookup{}, 7*24*time.Hour)
 	tr.SetClock(func() time.Time { return now })
 	var asked [][2]int64
-	tr.SetShareSource(func(from, to int64) (float64, float64, string) {
+	tr.SetShareSource(func(from, to int64) ShareSum {
 		asked = append(asked, [2]int64{from, to})
 		if to < first.Unix()/3600 {
-			return 30, 70, StatusFinal // before: Bithumb 30%
+			return ShareSum{Venues: map[string]float64{"bithumb": 30, "upbit": 60, "coinone": 10}, Total: 100, Status: StatusFinal}
 		}
-		return 20, 80, StatusFinal // after: Bithumb 20%
+		return ShareSum{Venues: map[string]float64{"bithumb": 20, "upbit": 80}, Total: 100, Status: StatusFinal}
 	})
 	tr.AddListing(Listing{Market: mk(market.Upbit, "RSR"), FirstTrade: first, Source: SourceScan})
 	ms := tr.Snapshot(now).Coins[0].MarketShare

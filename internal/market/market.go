@@ -43,6 +43,31 @@ var MarketListURLs = map[Exchange]string{
 	Bithumb: "https://api.bithumb.com/v1/market/all?isDetails=true",
 }
 
+// ParseAllMarkets reads the same list keeping every quote (KRW, BTC, USDT),
+// for the whole market totals.
+func ParseAllMarkets(exchange Exchange, payload []byte) ([]Market, error) {
+	trimmed := bytes.TrimSpace(payload)
+	if len(trimmed) == 0 || trimmed[0] != '[' {
+		return nil, errors.New("market list is not a JSON array")
+	}
+	var rows []listRow
+	if err := json.Unmarshal(trimmed, &rows); err != nil {
+		return nil, err
+	}
+	markets := make([]Market, 0, len(rows))
+	seen := map[string]bool{}
+	for _, row := range rows {
+		code := strings.ToUpper(strings.TrimSpace(row.Market))
+		quote, base, ok := strings.Cut(code, "-")
+		if !ok || base == "" || quote == "" || seen[code] {
+			continue
+		}
+		seen[code] = true
+		markets = append(markets, Market{Exchange: exchange, Code: code, Base: base, Quote: quote})
+	}
+	return markets, nil
+}
+
 type Market struct {
 	Exchange    Exchange `json:"exchange"`
 	Code        string   `json:"market"`

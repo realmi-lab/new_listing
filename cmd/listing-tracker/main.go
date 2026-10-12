@@ -96,13 +96,20 @@ func run() error {
 		return fmt.Errorf("-lookback 은 최대 %s 입니다", humanDays(discovery.MaxLookback))
 	}
 	scanner := discovery.New(candleClient, *lookback)
-	// Whole KRW market totals for Bithumb's overall share around listings;
-	// filled by the startup scan, then kept fresh a few requests a second.
+	// The five domestic exchanges' whole market per hour, for Bithumb's
+	// overall share around listings on the Bithumb domestic index basis.
+	// Upbit and Bithumb KRW markets come with the listing scan; every other
+	// market is read once at start, then all are kept fresh slowly.
 	totals := marketshare.New()
-	track.SetShareSource(totals.Window)
-	totalsRate := map[market.Exchange]float64{market.Upbit: 1.5, market.Bithumb: 4}
+	shareSource := marketshare.NewSource(client, candleClient, client.Now)
+	totals.Expect(marketshare.Upbit, 2)
+	totals.Expect(marketshare.Bithumb, 2)
+	track.SetShareSource(func(from, to int64) tracker.ShareSum { return shareSum(totals.Window(from, to)) })
+	totalsRate := map[marketshare.Venue]float64{
+		marketshare.Upbit: 1.5, marketshare.Bithumb: 4, marketshare.Coinone: 3, marketshare.Korbit: 3, marketshare.Gopax: 2,
+	}
 	if *upbitRate > 0 {
-		totalsRate[market.Upbit] = min(1.5, max(*upbitRate/4, 0.25))
+		totalsRate[marketshare.Upbit] = min(1.5, max(*upbitRate/4, 0.25))
 	}
 	scanner.SetClock(client.Now)
 
@@ -138,6 +145,7 @@ func run() error {
 			"registry":        watcher.Statuses(),
 			"discovery":       scanner.Progress(),
 			"market_totals":   totals.Statuses(),
+			"market_24h":      last24Hours(totals, client.Now()),
 			"notices":         noticeWatcher.Statuses(),
 			"clock_offset_ms": client.Now().Sub(time.Now()).Milliseconds(),
 			"version":         version,
@@ -180,8 +188,17 @@ func run() error {
 	for _, exchange := range market.Exchanges {
 		start(func() { track.RunFetcher(ctx, exchange, candleClient) })
 		start(func() {
+			venue := marketshare.Venue(exchange)
 			scan(ctx, watcher, scanner, track, totals, exchange)
-			totals.Refresh(ctx, candleClient, exchange, func() []market.Market { return watcher.Markets(exchange) }, totalsRate[exchange])
+			// BTC and USDT markets: the scan read only the KRW ones.
+			totals.Prime(ctx, shareSource, venue, func(p marketshare.Pair) bool { return p.Quote == "KRW" })
+			totals.Refresh(ctx, shareSource, venue, totalsRate[venue])
+		})
+	}
+	for _, venue := range []marketshare.Venue{marketshare.Coinone, marketshare.Korbit, marketshare.Gopax} {
+		start(func() {
+			totals.Prime(ctx, shareSource, venue, nil)
+			totals.Refresh(ctx, shareSource, venue, totalsRate[venue])
 		})
 	}
 	start(func() {
@@ -235,12 +252,35 @@ func scan(ctx context.Context, watcher *registry.Watcher, scanner *discovery.Sca
 			line("%s  최근 상장   %-14s 첫 체결 %s", label(exchange), found.Market.Code, found.FirstTrade.In(candles.KST).Format("01-02 15:04"))
 		}
 		track.AddListing(tracker.Listing{Market: found.Market, FirstTrade: found.FirstTrade, Relisting: found.Relisting, Source: tracker.SourceScan})
-	}, func(m market.Market, hours []candles.Candle) { totals.Apply(m.Key(), hours) })
+	}, func(m market.Market, hours []candles.Candle) {
+		totals.Apply(marketshare.Pair{Venue: marketshare.Venue(exchange), Code: m.Code, Base: m.Base, Quote: m.Quote}, marketshare.FromCandles(hours))
+	})
 	if ctx.Err() == nil {
 		p := scanner.Progress()[exchange]
-		totals.MarkReady(exchange, time.Now().Unix()/3600-discovery.HoursPerRead+1, p.Errors)
+		totals.PartDone(marketshare.Venue(exchange), time.Now().Unix()/3600-discovery.HoursPerRead+1, p.Errors)
 		line("%s  확인 완료   최근 상장 %d개 · 조회 실패 %d개", label(exchange), p.Found, p.Errors)
 	}
+}
+
+// last24Hours is the whole market over the hourly candles closest to the
+// last 24 hours, the open hour included, to compare with the index's
+// rolling day: it starts on the hour nearest to 24 hours ago.
+func last24Hours(totals *marketshare.Totals, now time.Time) map[string]any {
+	hour := now.Unix() / 3600
+	from := hour - 23
+	if now.Minute() < 30 {
+		from = hour - 24
+	}
+	sum := shareSum(totals.Window(from, hour))
+	return map[string]any{"from": from * 3600 * 1000, "to": now.UnixMilli(), "venues": sum.Venues, "total": sum.Total, "status": sum.Status}
+}
+
+func shareSum(w marketshare.WindowSum) tracker.ShareSum {
+	venues := make(map[string]float64, len(w.Venues))
+	for v, amount := range w.Venues {
+		venues[string(v)] = amount
+	}
+	return tracker.ShareSum{Venues: venues, Total: w.Total, Status: w.Status}
 }
 
 type lookupFunc func(string) []market.Market

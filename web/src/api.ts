@@ -39,12 +39,13 @@ export interface ExchangeInfo {
   recent_hour: Cell;
 }
 
-/** Bithumb's share of the whole KRW market (Bithumb + Upbit) over whole hours. */
+/** Bithumb's share of the five domestic exchanges' whole market over whole
+ *  hours, on the Bithumb domestic index basis. */
 export interface ShareWindow {
   from: number;
   to: number;
-  bithumb: number | null;
-  upbit: number | null;
+  venues: Record<string, number> | null;
+  total: number | null;
   share: number | null;
   status: Status;
 }
@@ -99,6 +100,7 @@ export interface Feeds {
   discovery: Record<string, Progress>;
   notices: Record<string, { last_success_at: string; last_error?: string }>;
   clock_offset_ms: number;
+  market_24h?: { from: number; to: number; venues: Record<string, number> | null; total: number; status: Status };
   version: string;
   started_at: number;
 }

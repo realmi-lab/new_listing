@@ -35,6 +35,7 @@ type Candle struct {
 	Start       time.Time // UTC start of the candle
 	Amount      float64   // candle_acc_trade_price, in the quote currency (KRW)
 	Volume      float64   // candle_acc_trade_volume
+	High, Low   float64
 	Close       float64
 	LastTradeAt time.Time
 }
@@ -43,6 +44,8 @@ type row struct {
 	Market   string          `json:"market"`
 	UTC      string          `json:"candle_date_time_utc"`
 	Close    json.Number     `json:"trade_price"`
+	High     json.Number     `json:"high_price"`
+	Low      json.Number     `json:"low_price"`
 	Amount   json.Number     `json:"candle_acc_trade_price"`
 	Volume   json.Number     `json:"candle_acc_trade_volume"`
 	LastTime json.RawMessage `json:"timestamp"`
@@ -75,7 +78,9 @@ func Parse(payload []byte) ([]Candle, error) {
 			return nil, fmt.Errorf("candle volume: %w", err)
 		}
 		closePrice, _ := nonnegative(r.Close)
-		c := Candle{Start: start.UTC(), Amount: amount, Volume: volume, Close: closePrice}
+		high, _ := nonnegative(r.High)
+		low, _ := nonnegative(r.Low)
+		c := Candle{Start: start.UTC(), Amount: amount, Volume: volume, High: high, Low: low, Close: closePrice}
 		if ms, err := strconv.ParseInt(string(bytes.Trim(r.LastTime, `"`)), 10, 64); err == nil && ms > 0 {
 			c.LastTradeAt = time.UnixMilli(ms).UTC()
 		}

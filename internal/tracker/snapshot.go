@@ -107,15 +107,15 @@ type Coin struct {
 	Notices        []NoticeInfo `json:"notices"`
 }
 
-// ShareWindow is Bithumb's share of the whole KRW market (Bithumb + Upbit,
-// every KRW market) over whole clock hours [From, To).
+// ShareWindow is Bithumb's share of the five domestic exchanges' whole
+// market over whole clock hours [From, To), as the Bithumb index counts it.
 type ShareWindow struct {
-	From    int64    `json:"from"`
-	To      int64    `json:"to"`
-	Bithumb *float64 `json:"bithumb"`
-	Upbit   *float64 `json:"upbit"`
-	Share   *float64 `json:"share"`
-	Status  string   `json:"status"`
+	From   int64              `json:"from"`
+	To     int64              `json:"to"`
+	Venues map[string]float64 `json:"venues"`
+	Total  *float64           `json:"total"`
+	Share  *float64           `json:"share"`
+	Status string             `json:"status"`
 }
 
 // MarketShare compares the day before a listing with the time since it.
@@ -328,14 +328,15 @@ func (t *Tracker) Snapshot(now time.Time) Snapshot {
 
 func (t *Tracker) shareWindow(from, to int64, live bool) ShareWindow {
 	w := ShareWindow{From: from * 3600 * 1000, To: (to + 1) * 3600 * 1000}
-	bithumb, upbit, status := t.share(from, to)
-	w.Status = status
-	if status == StatusWaiting {
+	sum := t.share(from, to)
+	w.Status = sum.Status
+	if sum.Status == StatusWaiting {
 		return w
 	}
-	w.Bithumb, w.Upbit = f(bithumb), f(upbit)
-	w.Share = share(w.Bithumb, f(bithumb+upbit))
-	if live && status == StatusFinal {
+	w.Venues, w.Total = sum.Venues, f(sum.Total)
+	bithumb := sum.Venues["bithumb"]
+	w.Share = share(&bithumb, w.Total)
+	if live && sum.Status == StatusFinal {
 		w.Status = StatusLive
 	}
 	return w

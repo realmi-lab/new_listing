@@ -863,6 +863,10 @@
 .nl-line-share { margin-left: 6px; color: var(--muted-foreground); font-size: 0.6875rem; }
 .nl-coin-table td small { margin-top: 2px; }
 
-/* The exchange share bars get a clear outline so the segments stand out. */
-.nl-table .breakdown .nl-bar, .nl-detail-card .nl-bar { border-color: var(--bar-border); }
-.nl-table .breakdown .nl-texture, .nl-detail-card .nl-bar .nl-texture { border-color: var(--bar-border); }
+/* The exchange share bars: one thin outline, and a hairline between the
+   exchanges instead of a border around every segment. */
+.nl-table .breakdown .nl-bar, .nl-detail-card .nl-bar { border: 1px solid color-mix(in srgb, var(--bar-border) 70%, transparent); }
+.nl-table .breakdown .nl-texture, .nl-detail-card .nl-bar .nl-texture { border: 0; }
+.nl-table .breakdown .nl-texture + .nl-texture, .nl-detail-card .nl-bar .nl-texture + .nl-texture { border-left: 1px solid var(--bar-border); }
+.nl-market-reference { margin-top: 12px; }
+.nl-market-reference small { display: block; margin-top: 2px; color: var(--muted-foreground); font-size: var(--type-caption); }

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 
-import { useSnapshot, type Cell, type Coin, type Hour, type NoticeInfo, type Snapshot } from "./api";
+import { useSnapshot, type Cell, type Coin, type Hour, type NoticeInfo, type ShareWindow, type Snapshot } from "./api";
 import { FilterButton } from "./FilterButton";
 import {
   EXCHANGES, EXCHANGE_NAME, STATE_LABEL, TEXTURES, formatChange, formatEok, formatKRW,
@@ -237,6 +237,7 @@ export default function App() {
             <span>대기 <strong>{overview?.waiting ?? 0}</strong></span>
             <span>완료 <strong>{overview?.complete ?? 0}</strong></span>
           </div>
+          <MarketReference data={data} />
           {controls}
           <div className="nl-status" title={status.detail}>
             상태 <span className={connection === "offline" || status.alert ? "is-alert" : ""}>{connection === "live" ? "실시간" : connectionLabel}</span>
@@ -382,10 +383,10 @@ function CoinTable({ coins, total, sort, onSort, amount, now, selected, onSelect
               : coin.anchor_at ? "완료" : "—"}
           </td>
           <td className="breakdown"><TextureBar segments={cellSegments(coinExchangeCells(coin))} label={`${coin.base} 거래소 점유율`} /></td>
-          <td className="num" title="상장 시각 앞 24시간, 업비트·빗썸 원화 마켓 전체 중 빗썸 비중 (정시 시간봉 기준)">
+          <td className="num" title="상장 시각 앞 24시간, 국내 5사 전체 마켓 중 빗썸 비중 (빗썸 인덱스 기준, 정시 시간봉; 코빗·고팍스는 수량×평균가격 추정)">
             {ms ? <>{formatShare(ms.before.share)}<small>{shareRange(ms.before.from, false)}</small></> : "—"}
           </td>
-          <td className="num" title="상장 시각부터 24시간(진행 중이면 지금까지), 업비트·빗썸 원화 마켓 전체 중 빗썸 비중 (정시 시간봉 기준)">
+          <td className="num" title="상장 시각부터 24시간(진행 중이면 지금까지), 국내 5사 전체 마켓 중 빗썸 비중 (빗썸 인덱스 기준, 정시 시간봉; 코빗·고팍스는 수량×평균가격 추정)">
             {ms ? <>{formatShare(ms.after.share)}<small>{sharePoints(coin) || shareRange(ms.after.from, ms.after.status === "LIVE")}</small></> : "—"}
           </td>
           <td>{stillLoading(coin)
@@ -489,6 +490,32 @@ function HourBars({ hours, compact = false }: { hours: Hour[]; compact?: boolean
   </span>;
 }
 
+/** Bithumb's share of the five exchanges over the latest 24 hourly candles,
+ *  to compare with the Bithumb domestic index. */
+function MarketReference({ data }: { data: Snapshot | null }) {
+  const m = data?.feeds?.market_24h;
+  if (!m || !m.venues || !m.total) return null;
+  return <div className="nl-market-reference" title="국내 5사 전체 마켓, 최근 시간봉 24개(진행 중 시간 포함). 코빗·고팍스는 수량×평균가격 추정">
+    <div className="nl-summary-heading"><span>최근 24시간 빗썸 점유율</span><strong>{formatShare((m.venues.bithumb ?? 0) / m.total * 100)}</strong></div>
+    <small>국내 5사 · {formatKST(m.from)}부터 · {m.status === "PARTIAL" ? "일부 미확인" : "시간봉 기준"}</small>
+  </div>;
+}
+
+const VENUES = [["bithumb", "빗썸"], ["upbit", "업비트"], ["coinone", "코인원"], ["korbit", "코빗"], ["gopax", "고팍스"]] as const;
+
+/** Each domestic exchange's share before and after the listing. */
+function VenueShares({ before, after }: { before: ShareWindow; after: ShareWindow }) {
+  const pct = (w: ShareWindow, id: string) => w.venues && w.total ? formatShare((w.venues[id] ?? 0) / w.total * 100) : "—";
+  return <table className="nl-table nl-mini-table nl-venue-shares">
+    <thead><tr><th>거래소</th><th className="num">상장 전 1일</th><th className="num">상장 후</th></tr></thead>
+    <tbody>{VENUES.map(([id, name]) => <tr key={id}>
+      <th scope="row" className={`nl-ex-name nl-ex-${id}`}>{name}{(id === "korbit" || id === "gopax") && <small>추정</small>}</th>
+      <td className="num">{pct(before, id)}</td>
+      <td className="num">{pct(after, id)}</td>
+    </tr>)}</tbody>
+  </table>;
+}
+
 function CoinDetail({ coin, amount, now }: { coin: Coin | null; amount: (v: number | null | undefined) => string; now: number }) {
   if (!coin) return <div className="nl-detail-card"><p className="nl-visual-empty">코인을 고르면 시간별 거래금액을 보여 줍니다.</p></div>;
   const hours = coin.hours ?? [];
@@ -512,9 +539,9 @@ function CoinDetail({ coin, amount, now }: { coin: Coin | null; amount: (v: numb
         </li>;
       })}
     </ul>
-    {coin.market_share && <div className="nl-share-compare" title="업비트·빗썸 원화 마켓 전체 중 빗썸 비중 (정시 시간봉 기준)">
+    {coin.market_share && <div className="nl-share-compare" title="국내 5사 전체 마켓 중 빗썸 비중 (빗썸 인덱스 기준, 정시 시간봉; 코빗·고팍스는 수량×평균가격 추정)">
       <div className="nl-summary-heading">
-        <span>빗썸 전체 점유율</span>
+        <span>빗썸 전체 점유율 (국내 5사)</span>
         <strong>{formatShare(coin.market_share.before.share)} → {formatShare(coin.market_share.after.share)}</strong>
       </div>
       <p className="nl-source">
@@ -522,6 +549,7 @@ function CoinDetail({ coin, amount, now }: { coin: Coin | null; amount: (v: numb
         상장 후 {shareRange(coin.market_share.after.from, coin.market_share.after.status === "LIVE")}
         {sharePoints(coin) && ` · ${sharePoints(coin)}`}
       </p>
+      <VenueShares before={coin.market_share.before} after={coin.market_share.after} />
     </div>}
     {hours.length > 0 && <HourBars hours={hours} />}
     {hours.length > 0 && <table className="nl-table nl-mini-table">
