@@ -45,10 +45,17 @@ function coinExchangeCells(coin: Coin): Record<string, Cell> {
   return Object.fromEntries(EXCHANGES.map(([id]) => [id, coin.exchanges[id]?.cumulative]));
 }
 
+/** The +N hour still being filled; none once the 24 hours are over. */
 function currentHour(coin: Coin): Hour | undefined {
-  const hours = coin.hours ?? [];
-  if (coin.state === "COMPLETE") return hours[hours.length - 1];
-  return hours[Math.min(Math.max(coin.current_hour, 1), hours.length) - 1];
+  if (coin.state !== "TRACKING" || coin.current_hour < 1 || coin.current_hour > 24) return undefined;
+  return coin.hours?.[coin.current_hour - 1];
+}
+
+/** The 60 minutes up to now; after the 24 hours, hour +24. */
+function recentRange(coin: Coin, now: number): string {
+  if (coin.recent_hour_from == null) return "";
+  const done = coin.end_at != null && now >= coin.end_at;
+  return `${formatKSTTime(coin.recent_hour_from)}~${formatKSTTime(done ? coin.end_at : now)}`;
 }
 
 /** The latest whole hour's change against the hour before it. */
@@ -261,7 +268,7 @@ export default function App() {
             </label>
           </div>
           <p className="nl-copy nl-detail-copy">
-            {view === "coins" && "누적은 +1시간부터 지금(최대 +24시간)까지 시간별 거래금액을 더한 값입니다. 시간별 값은 1분봉 60개의 합이고 일봉은 쓰지 않습니다. 최근 1시간은 지금까지의 직전 60분입니다."}
+            {view === "coins" && "누적: +1시간부터 지금(최대 +24시간)까지의 합. 최근 60분: 지금 시각에서 거꾸로 60분. 진행 중 시간: 상장 시각 기준으로 지금 쌓이고 있는 +N시간 구간. 모든 값은 1분봉 합이며 일봉은 쓰지 않습니다."}
             {view === "hours" && `+1시간은 첫 체결 시각부터 60분입니다. ${hourMode === "hour" ? "각 칸은 그 1시간의 거래금액" : "각 칸은 상장 후 그 시간까지의 누적 거래금액"}입니다.`}
             {view === "notices" && `최근 ${lookbackDays}일의 상장 관련 공지입니다. 공지는 예고이고, 실제 상장 시각은 마켓 목록과 첫 1분봉으로 확인합니다.`}
           </p>
@@ -327,8 +334,8 @@ function CoinTable({ coins, total, sort, onSort, amount, now, selected, onSelect
       <SortHeading label="상장(첫 체결)" field="listed" sort={sort} onSort={onSort} />
       <th>상장 이후</th>
       <SortHeading className="num" label="누적" field="cumulative" sort={sort} onSort={onSort} />
-      <SortHeading className="num" label="최근 1시간" field="recent" sort={sort} onSort={onSort} />
-      <SortHeading className="num" label="현재 시간" field="current" sort={sort} onSort={onSort} />
+      <SortHeading className="num" label="최근 60분" field="recent" sort={sort} onSort={onSort} />
+      <SortHeading className="num" label="진행 중 시간" field="current" sort={sort} onSort={onSort} />
       <SortHeading className="num" label="-1시간 대비" field="change" sort={sort} onSort={onSort} />
       <th className="breakdown">거래소 구성</th>
       {EXCHANGES.map(([id, name]) => <SortHeading key={id} className={`num nl-venue-cell nl-venue-name nl-ex-${id}`} label={name} field={`ex:${id}`} sort={sort} onSort={onSort} />)}
@@ -343,8 +350,11 @@ function CoinTable({ coins, total, sort, onSort, amount, now, selected, onSelect
           <td>{coin.anchor_at ? formatKST(coin.anchor_at) : "대기"}</td>
           <td>{elapsedLabel(coin, now)}</td>
           <td className="num" title={statusLabel(coin.cumulative)}>{amount(coin.cumulative.amount)}<small>{formatShare(coin.cumulative.share)}</small></td>
-          <td className="num" title={`${formatKSTTime(coin.recent_hour_from)}부터 · ${statusLabel(coin.recent_hour)}`}>{amount(coin.recent_hour.amount)}</td>
-          <td className="num" title={statusLabel(hour?.total)}>{amount(hour?.total.amount)}<small>{hour ? `+${hour.index}시간` : ""}</small></td>
+          <td className="num" title={`지금까지의 직전 60분 · ${statusLabel(coin.recent_hour)}`}>{amount(coin.recent_hour.amount)}<small>{recentRange(coin, now)}</small></td>
+          <td className="num" title={hour ? `상장 시각 기준 +${hour.index}시간 구간, 지금까지 쌓인 금액 · ${statusLabel(hour.total)}` : "24시간이 끝나 진행 중인 구간이 없습니다"}>
+            {hour ? amount(hour.total.amount) : coin.anchor_at ? "완료" : "—"}
+            <small>{hour ? `+${hour.index}시간 · ${formatKSTTime(hour.from)}~` : ""}</small>
+          </td>
           <td className="num">{formatChange(lastChange(coin))}</td>
           <td className="breakdown"><TextureBar segments={cellSegments(coinExchangeCells(coin))} label={`${coin.base} 거래소 구성`} /></td>
           <ExchangeCells coin={coin} amount={amount} />
