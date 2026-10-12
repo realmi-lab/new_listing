@@ -437,15 +437,3 @@ func (t *Tracker) coinLocked(s *session, nowMin, closed int64) Coin {
 	}
 	return coin
 }
-
-// SessionBases lists the tracked bases, for tests and logs.
-func (t *Tracker) SessionBases() []string {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	bases := make([]string, 0, len(t.sessions))
-	for _, s := range t.sessions {
-		bases = append(bases, s.base)
-	}
-	sort.Strings(bases)
-	return bases
-}

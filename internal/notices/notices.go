@@ -1,14 +1,12 @@
-// Package notices follows listing announcements: Bithumb's official notice
-// API, Upbit's announcement list, and Upbit's announcement WebSocket when an
-// API key is configured. A notice announces a listing; the market list and
-// the first candle confirm it.
+// Package notices follows listing announcements in Bithumb's official notice
+// API and Upbit's announcement list. A notice announces a listing; the market
+// list and the first candle confirm it.
 package notices
 
 import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -20,9 +18,8 @@ import (
 const (
 	BithumbURL = "https://api.bithumb.com/v1/notices?count=20"
 	// Upbit's web announcement list. It is not part of the documented Open
-	// API and may change; the WebSocket below is the documented source.
-	UpbitListURL      = "https://api-manager.upbit.com/api/v1/announcements?os=web&page=1&per_page=20&category=trade"
-	UpbitWebSocketURL = "wss://api.upbit.com/websocket/v1/private"
+	// API and may change.
+	UpbitListURL = "https://api-manager.upbit.com/api/v1/announcements?os=web&page=1&per_page=20&category=trade"
 )
 
 type Notice struct {
@@ -32,7 +29,7 @@ type Notice struct {
 	URL         string          `json:"url"`
 	Category    string          `json:"category"`
 	PublishedAt time.Time       `json:"published_at"`
-	Source      string          `json:"source"` // LIST or WEBSOCKET
+	Source      string          `json:"source"` // LIST
 	Listing     bool            `json:"listing"`
 	KRW         bool            `json:"krw"`
 	Symbols     []string        `json:"symbols"`
@@ -129,8 +126,7 @@ func ParseUpbitList(payload []byte) ([]Notice, error) {
 	result := make([]Notice, 0, len(root.Data.Notices))
 	for _, r := range root.Data.Notices {
 		page := r.ID.String()
-		// The WebSocket identifies an announcement by uuid; use it here too
-		// so both sources name the same notice the same way.
+		// The uuid is Upbit's stable announcement id.
 		id := strings.TrimSpace(r.UUID)
 		if id == "" {
 			id = page
@@ -148,42 +144,6 @@ func ParseUpbitList(payload []byte) ([]Notice, error) {
 	return result, nil
 }
 
-// ParseUpbitAnnouncement reads one announcement WebSocket frame. Other
-// frames return ok=false; an error frame returns its message as err.
-func ParseUpbitAnnouncement(payload []byte) (Notice, bool, error) {
-	var frame struct {
-		Type          string          `json:"type"`
-		SimpleType    string          `json:"ty"`
-		UUID          string          `json:"uuid"`
-		Title         string          `json:"title"`
-		Category      string          `json:"category"`
-		URL           string          `json:"url"`
-		FirstListedAt string          `json:"first_listed_at"`
-		ListedAt      string          `json:"listed_at"`
-		Error         json.RawMessage `json:"error"`
-	}
-	if err := json.Unmarshal(payload, &frame); err != nil {
-		return Notice{}, false, nil
-	}
-	if len(frame.Error) > 0 && string(frame.Error) != "null" {
-		return Notice{}, false, fmt.Errorf("Upbit WebSocket error: %s", strings.TrimSpace(string(frame.Error)))
-	}
-	if frame.Type != "announcement" && frame.SimpleType != "announcement" {
-		return Notice{}, false, nil
-	}
-	if frame.UUID == "" || frame.Title == "" {
-		return Notice{}, false, nil
-	}
-	url := frame.URL
-	if url == "" {
-		url = "https://upbit.com/service_center/notice"
-	}
-	return Classify(Notice{
-		Exchange: market.Upbit, ID: frame.UUID, Title: strings.TrimSpace(frame.Title), URL: url,
-		Category: frame.Category, PublishedAt: parseTime(frame.FirstListedAt, frame.ListedAt), Source: "WEBSOCKET",
-	}), true, nil
-}
-
 func parseTime(values ...string) time.Time {
 	for _, value := range values {
 		if t, err := time.Parse(time.RFC3339, value); err == nil {
@@ -193,5 +153,5 @@ func parseTime(values ...string) time.Time {
 	return time.Time{}
 }
 
-// Key identifies a notice across the list and WebSocket sources.
+// Key identifies a notice.
 func Key(n Notice) string { return string(n.Exchange) + "/" + n.ID }

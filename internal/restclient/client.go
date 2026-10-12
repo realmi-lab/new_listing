@@ -115,9 +115,39 @@ func (c *Client) observeDate(header string, sent, received time.Time) {
 	c.offset.Store(int64(previous + (measured-previous)/8))
 }
 
+// allowedHost reports whether a redirect may go to host: only the two
+// exchanges' own domains (Bithumb's notice API answers with a redirect to
+// feed-api.bithumb.com).
+func allowedHost(host string) bool {
+	host = strings.ToLower(host)
+	for _, domain := range []string{"upbit.com", "bithumb.com"} {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return true
+		}
+	}
+	return false
+}
+
+// NewHTTPClient follows at most three redirects, each to an https address
+// of Upbit or Bithumb.
+func NewHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(request *http.Request, via []*http.Request) error {
+			if len(via) >= 3 {
+				return errors.New("too many redirects")
+			}
+			if request.URL.Scheme != "https" || !allowedHost(request.URL.Hostname()) {
+				return fmt.Errorf("redirect to %s refused", request.URL.Host)
+			}
+			return nil
+		},
+	}
+}
+
 func New(httpClient *http.Client) *Client {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 5 * time.Second}
+		httpClient = NewHTTPClient(5 * time.Second)
 	}
 	return &Client{
 		http: httpClient, gates: map[string]*sync.Mutex{}, slots: map[string]*slot{},

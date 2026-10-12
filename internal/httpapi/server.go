@@ -21,10 +21,22 @@ type Server struct {
 	now     func() time.Time
 	web     fs.FS
 
+	// hosts, when set, are the only Host headers served. A loopback
+	// listener accepts only its own names, so a web page that rebinds its
+	// domain to 127.0.0.1 cannot read the API through the viewer's browser.
+	hosts map[string]bool
+
 	mu       sync.Mutex
 	cached   []byte
 	cachedAt time.Time
 	streams  int
+}
+
+// LoopbackOnly limits requests to the loopback names of the given port.
+func (s *Server) LoopbackOnly(port string) {
+	s.hosts = map[string]bool{
+		"127.0.0.1:" + port: true, "localhost:" + port: true, "[::1]:" + port: true,
+	}
 }
 
 func New(t *tracker.Tracker, feeds func() any, now func() time.Time, web fs.FS) *Server {
@@ -76,7 +88,17 @@ func (s *Server) Handler() http.Handler {
 			_, _ = w.Write([]byte("화면 파일이 이 실행 파일에 포함되지 않았습니다. /api/snapshot 으로 자료를 확인할 수 있습니다.\n"))
 		})
 	}
-	return securityHeaders(mux)
+	return s.checkHost(securityHeaders(mux))
+}
+
+func (s *Server) checkHost(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.hosts != nil && !s.hosts[strings.ToLower(r.Host)] {
+			http.Error(w, "forbidden host", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // stream sends the snapshot once a second as server-sent events.

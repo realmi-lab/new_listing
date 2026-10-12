@@ -53,8 +53,6 @@ func run() error {
 	registryInterval := flag.Duration("registry-interval", registry.DefaultInterval, "마켓 목록 확인 간격")
 	watch := flag.String("watch", "", "지금부터 직접 추적할 코인, 쉼표로 구분 (예: BTC,ETH)")
 	upbitRate := flag.Float64("upbit-rate", 0, "업비트 그룹별 초당 요청 상한 (같은 IP에서 다른 업비트 프로그램을 쓸 때 낮춤, 최대 8)")
-	upbitAccess := flag.String("upbit-access-key", "", "업비트 Open API Access Key (선택, 공지 웹소켓용)")
-	upbitSecret := flag.String("upbit-secret-key", "", "업비트 Open API Secret Key (선택, 공지 웹소켓용)")
 	webDir := flag.String("web", "", "화면 파일 폴더 (개발용; 기본은 실행 파일에 포함된 화면)")
 	noBrowser := flag.Bool("no-browser", false, "켤 때 브라우저를 열지 않음")
 	verbose := flag.Bool("verbose", false, "자세한 기록 출력")
@@ -68,21 +66,10 @@ func run() error {
 	logger := slog.New(newConsoleHandler(os.Stdout, level))
 	slog.SetDefault(logger)
 
-	// Upbit's announcement socket needs a key; it comes from the command line
-	// or the environment, never from a file next to the program.
-	key := notices.UpbitKey{
-		Access: firstNonEmpty(*upbitAccess, os.Getenv("UPBIT_ACCESS_KEY")),
-		Secret: firstNonEmpty(*upbitSecret, os.Getenv("UPBIT_SECRET_KEY")),
-	}
-	if (key.Access == "") != (key.Secret == "") {
-		line("업비트 키는 Access Key와 Secret Key를 함께 넣어야 합니다. 이번에는 공지 목록 확인으로 실행합니다.")
-		key = notices.UpbitKey{}
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	client := restclient.New(&http.Client{Timeout: 8 * time.Second})
+	client := restclient.New(restclient.NewHTTPClient(8 * time.Second))
 	if *upbitRate > 0 {
 		client.SetUpbitRate(*upbitRate)
 	}
@@ -101,7 +88,7 @@ func run() error {
 	if *upbitRate > 0 {
 		track.SetLiveRate(market.Upbit, max(*upbitRate/2, 0.5))
 	}
-	watcher = registry.New(client, nil, *registryInterval, func(l market.Listing) {
+	watcher = registry.New(client, *registryInterval, func(l market.Listing) {
 		line("%s  신규 상장   %s %s — 첫 체결을 기다립니다", label(l.Exchange), l.Code, l.KoreanName)
 		track.AddListing(tracker.Listing{Market: l.Market, DetectedAt: l.DetectedAt, Relisting: l.Relisting, Source: tracker.SourceLive})
 	}, logger)
@@ -111,7 +98,7 @@ func run() error {
 	started := time.Now()
 	var pollMu sync.Mutex
 	lastPoll := map[market.Exchange]time.Time{}
-	noticeWatcher := notices.NewWatcher(client, key, func(n notices.Notice) {
+	noticeWatcher := notices.NewWatcher(client, func(n notices.Notice) {
 		if !track.AddNotice(n) || !n.Listing {
 			return
 		}
@@ -142,22 +129,25 @@ func run() error {
 			"discovery":       scanner.Progress(),
 			"notices":         noticeWatcher.Statuses(),
 			"clock_offset_ms": client.Now().Sub(time.Now()).Milliseconds(),
-			"upbit_key":       key.Valid(),
 			"version":         version,
 			"started_at":      started.UnixMilli(),
 		}
-	}
-	server := &http.Server{
-		Addr: *addr, Handler: httpapi.New(track, feeds, client.Now, web).Handler(),
-		ReadHeaderTimeout: 5 * time.Second,
 	}
 	listener, err := net.Listen("tcp", *addr)
 	if err != nil {
 		return fmt.Errorf("화면 주소 %s 를 열 수 없습니다 (이미 실행 중인지 확인하세요): %w", *addr, err)
 	}
+	api := httpapi.New(track, feeds, client.Now, web)
+	if tcp, ok := listener.Addr().(*net.TCPAddr); ok && tcp.IP.IsLoopback() {
+		api.LoopbackOnly(fmt.Sprint(tcp.Port))
+	}
+	server := &http.Server{
+		Addr: *addr, Handler: api.Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 	url := "http://" + listener.Addr().String() + "/"
 
-	banner(version, url, key.Valid(), humanDays(*lookback))
+	banner(version, url, humanDays(*lookback))
 
 	var wg sync.WaitGroup
 	start := func(f func()) {
@@ -237,15 +227,6 @@ func scan(ctx context.Context, watcher *registry.Watcher, scanner *discovery.Sca
 type lookupFunc func(string) []market.Market
 
 func (f lookupFunc) ActiveMarketsForBase(base string) []market.Market { return f(base) }
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v = strings.TrimSpace(v); v != "" {
-			return v
-		}
-	}
-	return ""
-}
 
 func humanDays(d time.Duration) string {
 	if d%(24*time.Hour) == 0 {

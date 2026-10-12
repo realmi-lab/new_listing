@@ -62,8 +62,6 @@ func New(source CandleSource, lookback time.Duration) *Scanner {
 	return s
 }
 
-func (s *Scanner) Lookback() time.Duration { return s.lookback }
-
 // SetClock replaces the clock, normally with one corrected to the exchanges.
 func (s *Scanner) SetClock(now func() time.Time) { s.now = now }
 

@@ -85,9 +85,8 @@ export interface Progress {
 export interface Feeds {
   registry: Record<string, { last_success_at: string; last_error?: string; active_markets: number }>;
   discovery: Record<string, Progress>;
-  notices: Record<string, { mode: string; last_success_at: string; last_error?: string }>;
+  notices: Record<string, { last_success_at: string; last_error?: string }>;
   clock_offset_ms: number;
-  upbit_key: boolean;
   version: string;
   started_at: number;
 }

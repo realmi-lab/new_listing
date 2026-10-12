@@ -1,5 +1,6 @@
 // Package registry watches the official Upbit and Bithumb market lists and
-// reports a KRW market that appears after the stored baseline as a listing.
+// reports a KRW market that appears after the baseline as a listing. The
+// baseline is the first accepted list of each run; nothing is stored.
 package registry
 
 import (
@@ -34,19 +35,12 @@ type KnownMarket struct {
 	MissingPolls int
 }
 
-// Update is one accepted poll's changes, persisted in one transaction.
+// Update is one accepted poll's changes.
 type Update struct {
 	Exchange market.Exchange
 	At       time.Time
 	Markets  []KnownMarket
 	Listings []market.Listing
-}
-
-func (u Update) empty() bool { return len(u.Markets) == 0 && len(u.Listings) == 0 }
-
-type Store interface {
-	LoadKnownMarkets(context.Context) ([]KnownMarket, error)
-	ApplyRegistry(context.Context, Update) error
 }
 
 type Fetcher interface {
@@ -59,26 +53,22 @@ type Status struct {
 	LastError     string    `json:"last_error,omitempty"`
 	ActiveMarkets int       `json:"active_markets"`
 	BaselineReady bool      `json:"baseline_ready"`
-	PendingWrites int       `json:"pending_writes"`
 }
 
 type Watcher struct {
 	fetcher   Fetcher
-	store     Store
 	interval  time.Duration
 	onListing func(market.Listing)
 	now       func() time.Time
 	log       *slog.Logger
 
-	mu      sync.Mutex
-	known   map[market.Exchange]map[string]KnownMarket
-	status  map[market.Exchange]*Status
-	polled  map[market.Exchange]bool
-	pending []Update
-	flushMu sync.Mutex
+	mu     sync.Mutex
+	known  map[market.Exchange]map[string]KnownMarket
+	status map[market.Exchange]*Status
+	polled map[market.Exchange]bool
 }
 
-func New(fetcher Fetcher, store Store, interval time.Duration, onListing func(market.Listing), logger *slog.Logger) *Watcher {
+func New(fetcher Fetcher, interval time.Duration, onListing func(market.Listing), logger *slog.Logger) *Watcher {
 	if interval <= 0 {
 		interval = DefaultInterval
 	}
@@ -86,7 +76,7 @@ func New(fetcher Fetcher, store Store, interval time.Duration, onListing func(ma
 		logger = slog.Default()
 	}
 	w := &Watcher{
-		fetcher: fetcher, store: store, interval: interval, onListing: onListing,
+		fetcher: fetcher, interval: interval, onListing: onListing,
 		now: time.Now, log: logger,
 		known:  map[market.Exchange]map[string]KnownMarket{},
 		status: map[market.Exchange]*Status{},
@@ -97,31 +87,6 @@ func New(fetcher Fetcher, store Store, interval time.Duration, onListing func(ma
 		w.status[exchange] = &Status{}
 	}
 	return w
-}
-
-// Restore loads a stored baseline so the first poll after a restart can
-// report markets added while the process was down. Without a store the first
-// poll of each run is the baseline.
-func (w *Watcher) Restore(ctx context.Context) error {
-	if w.store == nil {
-		return nil
-	}
-	rows, err := w.store.LoadKnownMarkets(ctx)
-	if err != nil {
-		return err
-	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	for _, row := range rows {
-		if known, ok := w.known[row.Exchange]; ok {
-			known[row.Code] = row
-		}
-	}
-	for exchange, known := range w.known {
-		w.status[exchange].BaselineReady = len(known) > 0
-		w.status[exchange].ActiveMarkets = countActive(known)
-	}
-	return nil
 }
 
 func (w *Watcher) Run(ctx context.Context) {
@@ -192,14 +157,8 @@ func (w *Watcher) PollOnce(ctx context.Context, exchange market.Exchange) error 
 	status.LastError = ""
 	status.ActiveMarkets = countActive(w.known[exchange])
 	status.BaselineReady = true
-	if !update.empty() {
-		w.pending = append(w.pending, update)
-	}
 	w.mu.Unlock()
 
-	// Detection is time critical: tracking starts even when the database is
-	// briefly unavailable, and the write is retried on the next poll.
-	w.flush(ctx)
 	for _, listing := range update.Listings {
 		if w.onListing != nil {
 			w.onListing(listing)
@@ -212,49 +171,6 @@ func (w *Watcher) fail(exchange market.Exchange, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.status[exchange].LastError = err.Error()
-}
-
-func (w *Watcher) flush(ctx context.Context) {
-	w.flushMu.Lock()
-	defer w.flushMu.Unlock()
-	for {
-		w.mu.Lock()
-		if len(w.pending) == 0 {
-			w.updatePendingCount()
-			w.mu.Unlock()
-			return
-		}
-		next := w.pending[0]
-		w.mu.Unlock()
-		if w.store == nil {
-			w.mu.Lock()
-			w.pending = w.pending[1:]
-			w.mu.Unlock()
-			continue
-		}
-		writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		err := w.store.ApplyRegistry(writeCtx, next)
-		cancel()
-		w.mu.Lock()
-		if err != nil {
-			w.status[next.Exchange].LastError = "목록 저장 실패: " + err.Error()
-			w.updatePendingCount()
-			w.mu.Unlock()
-			return
-		}
-		w.pending = w.pending[1:]
-		w.mu.Unlock()
-	}
-}
-
-func (w *Watcher) updatePendingCount() {
-	counts := map[market.Exchange]int{}
-	for _, update := range w.pending {
-		counts[update.Exchange]++
-	}
-	for exchange, status := range w.status {
-		status.PendingWrites = counts[exchange]
-	}
 }
 
 // Diff compares one market list answer with the known markets of its
@@ -323,28 +239,6 @@ func countActive(known map[string]KnownMarket) int {
 		}
 	}
 	return count
-}
-
-// WaitBaseline blocks until every exchange has an accepted market list.
-func (w *Watcher) WaitBaseline(ctx context.Context) error {
-	ticker := time.NewTicker(200 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		w.mu.Lock()
-		ready := true
-		for _, exchange := range market.Exchanges {
-			ready = ready && w.polled[exchange]
-		}
-		w.mu.Unlock()
-		if ready {
-			return nil
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		}
-	}
 }
 
 // Markets returns the active KRW markets of one exchange.

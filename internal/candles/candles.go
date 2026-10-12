@@ -167,6 +167,3 @@ func (c *Client) MinuteRange(ctx context.Context, exchange market.Exchange, code
 	}
 	return nil, errors.New("minute range needs too many pages")
 }
-
-// FloorMinute truncates to the minute in UTC.
-func FloorMinute(t time.Time) time.Time { return t.UTC().Truncate(time.Minute) }

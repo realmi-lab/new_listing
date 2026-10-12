@@ -35,21 +35,16 @@ func label(exchange market.Exchange) string {
 	return name
 }
 
-func banner(version, url string, upbitKey bool, lookback string) {
+func banner(version, url, lookback string) {
 	consoleMu.Lock()
 	defer consoleMu.Unlock()
 	rule := strings.Repeat("=", 48)
-	upbit := "공지 목록 확인 (API 키 없음)"
-	if upbitKey {
-		upbit = "공지 웹소켓 (API 키 사용)"
-	}
 	fmt.Println(rule)
 	fmt.Printf("  빗썸·업비트 신규 상장 추적기   %s\n", version)
 	fmt.Println(rule)
 	fmt.Printf("  화면 주소     %s\n", url)
 	fmt.Printf("  찾는 범위     최근 %s 상장, 상장 후 24시간\n", lookback)
-	fmt.Printf("  업비트 공지   %s\n", upbit)
-	fmt.Printf("  빗썸 공지     공식 공지 API\n")
+	fmt.Printf("  상장 공지     업비트 공지 목록 · 빗썸 공지 API\n")
 	fmt.Printf("  종료          Ctrl+C 또는 창 닫기\n")
 	fmt.Println(strings.Repeat("-", 48))
 }
@@ -64,8 +59,6 @@ func usage() {
 
 자주 쓰는 옵션
   -watch 코인들              지금부터 직접 추적할 코인, 쉼표로 구분 (예: BTC,ETH)
-  -upbit-access-key 키       업비트 공지 웹소켓용 Access Key (선택)
-  -upbit-secret-key 키       업비트 공지 웹소켓용 Secret Key (선택)
   -no-browser                켤 때 브라우저를 열지 않음
 
 그 밖의 옵션
@@ -80,7 +73,7 @@ func usage() {
 예시
   %[1]s
   %[1]s -watch BTC
-  %[1]s -upbit-access-key 발급받은키 -upbit-secret-key 발급받은키
+  %[1]s -no-browser -addr 127.0.0.1:9000
 `, name)
 }
 

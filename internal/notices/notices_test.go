@@ -44,26 +44,16 @@ func TestParseBithumbNotices(t *testing.T) {
 	}
 }
 
-func TestUpbitListAndSocketShareTheUUID(t *testing.T) {
+func TestParseUpbitListUsesTheUUID(t *testing.T) {
 	list, err := ParseUpbitList([]byte(`{"success":true,"data":{"notices":[{"listed_at":"2026-10-12T13:54:09+09:00","first_listed_at":"2026-10-12T13:54:09+09:00","id":6651,"uuid":"1933802018","title":"리저브라이트(RSR) KRW, USDT 마켓 디지털 자산 추가","category":"거래"}]}}`))
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list=%v err=%v", list, err)
 	}
-	socket, ok, err := ParseUpbitAnnouncement([]byte(`{"type":"announcement","event_type":"CREATED","uuid":"1933802018","title":"리저브라이트(RSR) KRW, USDT 마켓 디지털 자산 추가","category":"trade","url":"https://www.upbit.com/service_center/notice?id=1933802018&view=share","first_listed_at":"2026-10-12T13:54:09+09:00","listed_at":"2026-10-12T13:54:09+09:00","timestamp":1,"stream_type":"REALTIME"}`))
-	if err != nil || !ok {
-		t.Fatalf("socket ok=%v err=%v", ok, err)
+	n := list[0]
+	if n.ID != "1933802018" || !strings.Contains(n.URL, "id=6651") || !n.Listing || n.PublishedAt.IsZero() {
+		t.Fatalf("notice %+v", n)
 	}
-	if Key(list[0]) != Key(socket) || !strings.Contains(list[0].URL, "id=6651") || !socket.Listing {
-		t.Fatalf("list %+v socket %+v", list[0], socket)
-	}
-	if _, _, err := ParseUpbitAnnouncement([]byte(`{"error":{"name":"INVALID_AUTH","message":"bad token"}}`)); err == nil {
-		t.Fatal("error frame not reported")
-	}
-}
-
-func TestUpbitTokenShape(t *testing.T) {
-	token, err := upbitToken(UpbitKey{Access: "access", Secret: "secret"})
-	if err != nil || strings.Count(token, ".") != 2 || strings.ContainsAny(token, "+/=") {
-		t.Fatalf("token %q err=%v", token, err)
+	if _, err := ParseUpbitList([]byte(`{"success":false}`)); err == nil {
+		t.Fatal("failed answer accepted")
 	}
 }

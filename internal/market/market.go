@@ -1,5 +1,5 @@
 // Package market holds the exchange and market identities shared by the
-// registry watcher, the WebSocket and ticker feeds and the tracker.
+// registry watcher, the candle and notice readers and the tracker.
 package market
 
 import (
@@ -41,16 +41,6 @@ const Quote = "KRW"
 var MarketListURLs = map[Exchange]string{
 	Upbit:   "https://api.upbit.com/v1/market/all?is_details=true",
 	Bithumb: "https://api.bithumb.com/v1/market/all?isDetails=true",
-}
-
-var TickerURLs = map[Exchange]string{
-	Upbit:   "https://api.upbit.com/v1/ticker",
-	Bithumb: "https://api.bithumb.com/v1/ticker",
-}
-
-var WebSocketURLs = map[Exchange]string{
-	Upbit:   "wss://api.upbit.com/websocket/v1",
-	Bithumb: "wss://ws-api.bithumb.com/websocket/v1",
 }
 
 type Market struct {

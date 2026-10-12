@@ -152,7 +152,7 @@ function collectionStatus(data: Snapshot | null): { text: string; alert: boolean
     }).join(", ")}`,
     `상장 공지: ${EXCHANGES.map(([id, name]) => {
       const n = feeds.notices[id];
-      return `${name}(${n?.mode === "WEBSOCKET" ? "웹소켓" : "목록"}) ${n?.last_error ? "오류" : ok(n?.last_success_at)}`;
+      return `${name} ${n?.last_error ? "오류" : ok(n?.last_success_at)}`;
     }).join(", ")}`,
   ].join("\n");
   const failed = EXCHANGES.some(([id]) => feeds.registry[id]?.last_error || feeds.notices[id]?.last_error || feeds.discovery[id]?.errors);
@@ -411,7 +411,7 @@ function NoticeTable({ notices, loading }: { notices: NoticeInfo[]; loading: boo
     <tbody>
       {notices.map(notice => <tr key={`${notice.exchange}-${notice.url}-${notice.title}`}>
         <td>{formatKST(notice.published_at)}</td>
-        <td>{EXCHANGE_NAME[notice.exchange] ?? notice.exchange}{notice.source === "WEBSOCKET" ? <small>웹소켓</small> : null}</td>
+        <td>{EXCHANGE_NAME[notice.exchange] ?? notice.exchange}</td>
         <td className="nl-notice-title"><a href={notice.url} target="_blank" rel="noreferrer noopener">{notice.title}</a></td>
         <td>{(notice.symbols ?? []).join(", ") || "—"}</td>
         <td>{notice.krw ? "예" : "아니오"}</td>
