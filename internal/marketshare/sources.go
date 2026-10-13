@@ -32,8 +32,8 @@ const (
 var Venues = []Venue{Bithumb, Upbit, Coinone, Korbit, Gopax}
 
 // Estimated venues publish candles with quantity but no KRW amount. Their
-// hourly amount is quantity × (high + low + close) / 3; against Korbit's
-// official 24-hour quote volume this was within 0.3%.
+// hourly amount is quantity × estimatePrice; against Korbit's official
+// 24-hour quote volume this was within 0.3%.
 var Estimated = map[Venue]bool{Korbit: true, Gopax: true}
 
 // Pair is one market of a venue.
@@ -230,7 +230,7 @@ func (s *Source) Hours(ctx context.Context, p Pair, count int) ([]Hour, error) {
 			if err != nil {
 				return nil, err
 			}
-			price := typical(c.High, c.Low, c.Close)
+			price := estimatePrice(c.High, c.Low, c.Close)
 			hours = append(hours, Hour{Start: time.UnixMilli(ms).UTC(), Amount: volume * price, Price: price})
 		}
 		return hours, nil
@@ -257,7 +257,7 @@ func (s *Source) Hours(ctx context.Context, p Pair, count int) ([]Hour, error) {
 			if err != nil {
 				return nil, err
 			}
-			price := typical(c[2], c[1], c[4])
+			price := estimatePrice(c[2], c[1], c[4])
 			hourStart := time.UnixMilli(ms).UTC().Truncate(time.Hour)
 			h := byHour[hourStart.Unix()]
 			if h == nil {
@@ -295,6 +295,20 @@ func number(value json.Number) (float64, error) {
 		return 0, fmt.Errorf("invalid number %q", value)
 	}
 	return v, nil
+}
+
+// estimatePrice is the price an estimated amount uses: the hour's typical
+// price, or its close when the hour holds an outlier trade (high above 1.5
+// times low). A Korbit listing's first trade at 10,000,000 against a close
+// of 174 otherwise turned 2억 of trading into 9,315억.
+func estimatePrice(high, low, close json.Number) float64 {
+	h, _ := strconv.ParseFloat(string(high), 64)
+	l, _ := strconv.ParseFloat(string(low), 64)
+	c, _ := strconv.ParseFloat(string(close), 64)
+	if h > 0 && l > 0 && h <= l*1.5 {
+		return (h + l + c) / 3
+	}
+	return c
 }
 
 func typical(high, low, close json.Number) float64 {

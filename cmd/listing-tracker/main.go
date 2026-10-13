@@ -146,6 +146,7 @@ func run() error {
 			"discovery":       scanner.Progress(),
 			"market_totals":   totals.Statuses(),
 			"market_24h":      last24Hours(totals, client.Now()),
+			"market_days":     marketDays(totals, client.Now()),
 			"notices":         noticeWatcher.Statuses(),
 			"clock_offset_ms": client.Now().Sub(time.Now()).Milliseconds(),
 			"version":         version,
@@ -273,6 +274,23 @@ func last24Hours(totals *marketshare.Totals, now time.Time) map[string]any {
 	}
 	sum := shareSum(totals.Window(from, hour))
 	return map[string]any{"from": from * 3600 * 1000, "to": now.UnixMilli(), "venues": sum.Venues, "total": sum.Total, "status": sum.Status}
+}
+
+// marketDays is the whole market per KST calendar day for the last eight
+// days, today so far included, to compare with the index's date view.
+func marketDays(totals *marketshare.Totals, now time.Time) []map[string]any {
+	today := now.In(candles.KST)
+	midnight := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, candles.KST)
+	nowHour := now.Unix() / 3600
+	days := make([]map[string]any, 0, 8)
+	for back := 7; back >= 0; back-- {
+		start := midnight.AddDate(0, 0, -back)
+		from := start.Unix() / 3600
+		to := min(from+23, nowHour)
+		sum := shareSum(totals.Window(from, to))
+		days = append(days, map[string]any{"day": start.Format("2006-01-02"), "venues": sum.Venues, "total": sum.Total, "status": sum.Status, "complete": to == from+23 && nowHour > to})
+	}
+	return days
 }
 
 func shareSum(w marketshare.WindowSum) tracker.ShareSum {
